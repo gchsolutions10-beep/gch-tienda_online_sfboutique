@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+/*
+ * Tokens de diseño. `--brand` y la paleta de la tienda los define cada negocio
+ * (src/app/t/[domain]/layout.tsx y src/lib/theme.ts). El panel usa los neutros.
+ */
+:root {
+  --brand: #7b2f9e;
+  --on-brand: #ffffff;
+  --brand-fg: #6b2a8a;
+
+  --store-bg: #f7f3fa;
+  --store-card: #ffffff;
+  --store-soft: #f4eef6;
+  --store-line: #e6dcea;
+  --store-ink: #2a1035;
+  --store-muted: #6a5872;
+  --on-store-ink: #ffffff;
+  --bar: var(--brand);
+  --on-bar: var(--on-brand);
+  --accent: #b0378f;
+  --on-accent: #ffffff;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-soft: color-mix(in oklab, var(--brand) 12%, transparent);
+  --color-brand-strong: var(--brand-fg);
+  --color-on-brand: var(--on-brand);
+
+  /* Panel de administración (neutro, claro) */
+  --color-ink: #1f1a24;
+  --color-cream: #f8f7fa;
+  --color-paper: #ffffff;
+  --color-line: #e5e1ea;
+  --color-muted: #6d6676;
+  --color-ok: #2e7d5b;
+  --color-danger: #b4383b;
+
+  /* Tienda (paleta del negocio) */
+  --color-store: var(--store-bg);
+  --color-store-card: var(--store-card);
+  --color-store-soft: var(--store-soft);
+  --color-store-line: var(--store-line);
+  --color-store-muted: var(--store-muted);
+  --color-store-ink: var(--store-ink);
+  --color-on-store-ink: var(--on-store-ink);
+  --color-bar: var(--bar);
+  --color-on-bar: var(--on-bar);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-playfair), Georgia, ui-serif, serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
