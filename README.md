@@ -23,3 +23,5 @@ npm run lint
 ```
 
 Arquitectura, modelo de datos, notas legales de Venezuela y fases: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
+
+Publicar en línea (GitHub + Neon + Vercel): [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).

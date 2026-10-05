@@ -15,7 +15,11 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:admin": "tsx prisma/admin.ts",
+    "migrar:neon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/migrar-neon.ps1",
+    "demo:neon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/demo-neon.ps1",
+    "admin:neon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/admin-neon.ps1"
   },
   "dependencies": {
     "@prisma/adapter-pg": "7.10.0",
