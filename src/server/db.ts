@@ -13,13 +13,24 @@ function createClient() {
 // Reutiliza el cliente entre recargas de HMR en desarrollo.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
+/** Se crea en la primera consulta (no al importar), así compilar no exige DATABASE_URL. */
+function client(): PrismaClient {
+  globalForPrisma.prisma ??= createClient();
+  return globalForPrisma.prisma;
+}
+
 /**
  * Cliente SIN filtro de tenant. Úsalo solo para: resolver el tenant desde el
  * host, autenticación, tareas de plataforma (SUPER_ADMIN) y el seed.
  * Para todo lo demás usa `tenantDb(tenantId)`.
  */
-export const db = globalForPrisma.prisma ?? createClient();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;
+export const db = new Proxy({} as PrismaClient, {
+  get(_target, prop) {
+    const c = client();
+    const value = Reflect.get(c, prop, c);
+    return typeof value === "function" ? value.bind(c) : value;
+  },
+});
 
 /** Modelos que tienen columna `tenantId` (ver prisma/schema.prisma). */
 const TENANT_SCOPED_MODELS = new Set<string>([
