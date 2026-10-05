@@ -3,7 +3,7 @@ import { getTenant } from "@/server/tenant";
 import { requireStaff } from "@/server/auth/guards";
 import { salesBook } from "@/server/services/invoices";
 import { PrintButton } from "@/components/admin/print-button";
-import { buttonSecondary, card, cn, inputClass } from "@/components/ui/styles";
+import { buttonSecondary, card, cn, inputBase } from "@/components/ui/styles";
 import { currentMonth, monthRange, salesBookTotals } from "@/lib/invoicing";
 import { formatVes } from "@/lib/money";
 
@@ -36,7 +36,7 @@ export default async function SalesBookPage({ params, searchParams }: PageProps<
         </div>
         <div className="flex flex-wrap gap-2">
           <form action="/admin/facturacion/libro" className="flex gap-2">
-            <input type="month" name="mes" defaultValue={month} aria-label="Mes" className={cn(inputClass, "w-44")} />
+            <input type="month" name="mes" defaultValue={month} aria-label="Mes" className={cn(inputBase, "w-44")} />
             <button className={buttonSecondary}>Ver</button>
           </form>
           <a href={`/admin/facturacion/libro/exportar?mes=${month}`} className={buttonSecondary}>⬇️ Excel (CSV)</a>

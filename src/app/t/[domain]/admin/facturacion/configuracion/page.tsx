@@ -78,7 +78,8 @@ export default async function InvoiceSettingsPage({ params }: PageProps<"/t/[dom
                 label: SERIES_LABEL[s.type],
                 series: s.series,
                 nextNumber: s.nextNumber,
-                controlMode: s.controlMode,
+                // Las notas usan el número de control de las facturas.
+                controlMode: series.find((x) => x.type === "INVOICE")?.controlMode ?? s.controlMode,
                 controlPrefix: s.controlPrefix ?? "",
                 nextControl: s.nextControl,
                 controlTo: s.controlTo,

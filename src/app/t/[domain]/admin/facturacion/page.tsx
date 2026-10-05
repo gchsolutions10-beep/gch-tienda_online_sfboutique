@@ -4,7 +4,7 @@ import { CASHIER_ROLES, isTenantAdmin, requireStaff } from "@/server/auth/guards
 import { tenantDb } from "@/server/db";
 import { getSeries, isFiscalReady, listDocuments } from "@/server/services/invoices";
 import { PageHeader } from "@/components/admin/page-header";
-import { buttonPrimary, buttonSecondary, card, cn, inputClass } from "@/components/ui/styles";
+import { buttonPrimary, buttonSecondary, card, cn, inputBase, inputClass } from "@/components/ui/styles";
 import { controlNumbersLeft, currentMonth, formatInvoiceNumber, INVOICE_TYPE, monthRange } from "@/lib/invoicing";
 import { formatUsd, formatVes, toCents } from "@/lib/money";
 import { formatVeId } from "@/lib/ve-ids";
@@ -89,7 +89,7 @@ export default async function InvoicesPage({ params, searchParams }: PageProps<"
       ) : null}
 
       <form className="mb-4 flex flex-wrap gap-2" action="/admin/facturacion">
-        <input type="month" name="mes" defaultValue={month} aria-label="Mes" className={cn(inputClass, "w-44")} />
+        <input type="month" name="mes" defaultValue={month} aria-label="Mes" className={cn(inputBase, "w-44")} />
         <input name="q" defaultValue={q} placeholder="Buscar por número, control, comprador o cédula" className={cn(inputClass, "max-w-sm")} />
         <button className={buttonSecondary}>Buscar</button>
       </form>

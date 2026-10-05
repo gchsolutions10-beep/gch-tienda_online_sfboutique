@@ -70,7 +70,7 @@ tests/unit/              # venezuela, catalog, orders (y matriz de variantes), c
 > Referencia para el desarrollo. **Validar con el contador del negocio** antes de facturar.
 
 - **IVA**: alícuota general 16 %, configurable; interruptor global y productos exentos uno por uno. Precio con IVA incluido (por defecto) o sumado (`src/lib/tax-ve.ts`).
-- **IGTF**: 3 % sobre pagos en divisas o criptoactivos cuando le aplica al negocio (p. ej. contribuyentes especiales). Desactivado por defecto; se calcula por pago.
+- **IGTF**: 3 % sobre pagos en divisas o criptoactivos cuando le aplica al negocio (p. ej. contribuyentes especiales). Desactivado por defecto; se calcula por pago (ver sección 5c).
 - **Factura**: número correlativo por serie + **número de control** asignado por una *imprenta digital autorizada* por el SENIAT o por formatos preimpresos (forma libre). Datos del comprador con cédula/RIF. Operaciones en divisas: se muestran los montos en Bs con la tasa BCV usada. El sistema no sustituye a la imprenta digital: guarda el número de control y la respuesta del proveedor (`providerData`).
 - **Tasas**: la BCV es la oficial (libros y factura); la P2P solo para gestión. Histórico con quién y cuándo la cargó; aviso si cambia más de 20 % (posible error de tipeo).
 - **Precios**: la tienda muestra USD y su equivalente en bolívares a la tasa del día.
@@ -86,7 +86,7 @@ tests/unit/              # venezuela, catalog, orders (y matriz de variantes), c
 6. **Anular**: sin pago libera lo apartado; pagado devuelve la mercancía al stock (`RETURN`) y el reembolso se hace aparte.
 7. **Stock en el panel**: los cambios de la matriz se guardan como **diferencias** sobre el stock actual (no pisan ventas hechas mientras se editaba) y cada uno deja un movimiento con su motivo (compra, conteo, daño).
 
-Pendiente: el **IGTF** de los pagos en divisas se calcula con la facturación (fase 4).
+El **IGTF** de los pagos en divisas se calcula desde la fase 4 (sección 5c).
 
 ## 5b. Caja, cuentas y CRM (fase 3)
 
@@ -95,6 +95,30 @@ Pendiente: el **IGTF** de los pagos en divisas se calcula con la facturación (f
 - **Vuelto**: si sobra, se entrega en Bs o en USD y queda como salida de efectivo de esa caja; no se permite dar más vuelto del efectivo que hay.
 - **Cierre**: por cada cuenta, esperado = fondo + cobros + entradas − salidas (efectivo) o cobros del turno (bancos y billeteras), contra lo contado; guarda la diferencia por cuenta y por moneda (`CashClosingLine`) y queda un reporte imprimible.
 - **CRM** (`/admin/clientes`): segmentos automáticos calculados al vuelo (VIP, Recurrente, Nueva, Inactiva, según `TenantSettings`), etiquetas manuales, mayoristas, cumpleañeras del mes, búsqueda por nombre, teléfono, cédula, correo o Instagram, y exportación CSV (dueña y encargada). La ficha muestra métricas (total, ticket promedio, frecuencia, método favorito, tallas y colores que compra), historial de compras de la web y de la tienda, y el seguimiento (notas, WhatsApp, llamadas, visitas).
+
+## 5c. Facturación, IGTF y contenido (fase 4)
+
+> Todo lo fiscal se marca «validar con el contador». Referencias: Providencia SNAT/2011/0071 y Reglamento de la Ley del IVA.
+
+**IGTF** (`src/lib/tax-ve.ts → splitIgtf`, `src/lib/cash.ts → tenderStatus`)
+- Un pago en divisas (USD/USDT) **trae el IGTF incluido**: `Payment.igtfAmount` es el impuesto y `Payment.igtfBase` la parte que paga el pedido. Lo que abona al pedido es `amountUsd − igtfAmount`.
+- El IGTF va solo sobre la parte del total que se paga en divisas; **el vuelto no lo lleva**. En caja, los pagos en Bs cubren primero.
+- El pedido acumula `igtfUsd` e `igtfBaseUsd` (pagos confirmados). `totalUsd` sigue siendo la mercancía; lo cobrado es `totalUsd + igtfUsd`.
+- La clienta y la caja ven el monto a pagar en divisas con el IGTF sumado (`amountDueIn(…, igtfRateBp)`).
+
+**Facturación** (`src/lib/invoicing.ts`, `src/server/services/invoices.ts`, `/admin/facturacion`)
+- Factura de un pedido **pagado** (web o tienda), una vigente por pedido. Montos en **Bs a la tasa BCV del día de emisión**; renglones copiados en `Invoice.lines` (JSON); el envío va como renglón no sujeto; IVA = base × alícuota en Bs; IGTF aparte, fuera de la base.
+- **Número de control**: modo de la serie de facturas, compartido por las notas (un solo consecutivo). `DIGITAL_PRINTER`: se emite y luego se anota el número que devuelve la imprenta (no se puede cambiar una vez puesto). `FREE_FORM`: rango preimpreso (`controlPrefix`, `nextControl`, `controlTo`) que se toma con UPDATE atómico. `NONE`: sin validez fiscal (aviso en pantalla).
+- **Notas de crédito** por renglón y cantidad (no devuelven más de lo facturado menos lo ya acreditado; no mueven stock; no acreditan IGTF). **Notas de débito**: concepto + base en Bs, gravada o exenta.
+- **Anular**: solo la dueña, sin notas vigentes; con imprenta digital y número de control, se corrige con nota de crédito.
+- **Libro de ventas** (`/admin/facturacion/libro`, CSV): orden de emisión, notas de crédito con signo negativo, anulados en cero (tipo de transacción 03), IGTF en su columna. Lo ven dueña y encargada.
+- **Configuración** (solo la dueña): razón social, RIF (con dígito verificador), domicilio fiscal, IVA, IGTF y numeración.
+- Prueba de punta a punta: `npx tsx tests/integration/facturacion.ts` (solo contra base local).
+
+**Contenido** (`src/lib/blog.ts`, `src/server/actions/admin/content.ts`)
+- **Blog** (`/admin/blog`): editor Markdown con barra de formato y vista previa, fotos dentro del artículo (`![descripción](/marca/blog-<id>i<hex>)`), portada, categorías, etiquetas, «Consigue este look», SEO con vista de Google. **Programado = PUBLISHED con fecha futura**: la tienda solo muestra lo que ya llegó a su fecha, sin tareas programadas.
+- **Portada** (`/admin/portada`): tarjetas verticales (máx. 4 activas) y banners con fechas desde/hasta (días completos en hora de Caracas). Los banners se muestran en el inicio de la tienda.
+- Roles: dueña y `EDITOR` (contenido). Enlaces solo internos (`/…`) o `https://`.
 
 ## 6. Propuesta de componentes de interfaz
 
@@ -120,8 +144,9 @@ Pendiente: el **IGTF** de los pagos en divisas se calcula con la facturación (f
 | Ficha del cliente (CRM) | ✅ | Datos, historial, métricas, segmentos y etiquetas, seguimiento, exportación CSV |
 | Caja multimoneda | ✅ | Venta en tienda con descuento, pagos mixtos, vuelto, entradas/salidas y cierre por cuenta y moneda |
 | Cuentas de cobro | ✅ | Alta y edición de las cuentas por tipo, visibles o no en la tienda en línea |
-| Factura / libro de ventas | Fase 4 | Emisión con número de control, notas de crédito, libro en Bs |
-| Editor del blog | Fase 4 | Markdown con vista previa, portada, productos enlazados, SEO |
+| Factura / libro de ventas | ✅ | Emisión con número de control, notas de crédito y débito, anular, libro en Bs con CSV, configuración fiscal |
+| Editor del blog | ✅ | Markdown con vista previa, fotos, portada, productos enlazados, SEO, programar |
+| Portada y banners | ✅ | Tarjetas de portada y banners con fechas, con fotos y orden |
 
 ## 7. Fases
 
@@ -130,5 +155,5 @@ Pendiente: el **IGTF** de los pagos en divisas se calcula con la facturación (f
 | 1 | Proyecto, esquema completo, seed de SF Boutique, tienda (portada, catálogo facetado, producto, bolsa, blog público), tasas BCV/P2P, apariencia, login | ✅ |
 | 2 | Panel de productos y stock por variante + checkout web con reporte de pago y reserva de stock + pedidos + envíos | ✅ |
 | 3 | CRM de clientes + cuentas de cobro editables + caja multimoneda con cierre por moneda | ✅ |
-| 4 | Facturación venezolana (series, número de control, notas, libro de ventas, IGTF) + CMS del blog y banners | Siguiente |
-| 5 | Publicación (GitHub, Neon, Vercel, dominio) y reportes de gestión USD/Bs | |
+| 4 | Facturación venezolana (series, número de control, notas, libro de ventas, IGTF) + CMS del blog y banners | ✅ |
+| 5 | Reportes de gestión USD/Bs (ventas, márgenes, P2P vs BCV) y dominio propio | Siguiente |

@@ -52,16 +52,18 @@ export async function getSeries(tenantId: string) {
  * y notas (salen de los mismos formatos): su rango vive en la serie de facturas.
  */
 async function takeNumbers(tx: Tx, tenantId: string, type: InvoiceType) {
-  const [row] = await tx.$queryRaw<{ id: string; number: number; controlMode: ControlMode }[]>`
+  const [row] = await tx.$queryRaw<{ id: string; number: number }[]>`
     UPDATE invoice_series SET "nextNumber" = "nextNumber" + 1
     WHERE id = (SELECT id FROM invoice_series WHERE "tenantId" = ${tenantId} AND type = ${type}::"InvoiceType" AND "isActive" ORDER BY series LIMIT 1)
-    RETURNING id, "nextNumber" - 1 AS number, "controlMode"`;
+    RETURNING id, "nextNumber" - 1 AS number`;
   if (!row) throw new OrderError("No hay una serie activa para este documento. Revisa Facturación > Configuración.");
+  // El modo y el rango del número de control son los de la serie de facturas.
+  const [invoiceSeries] = await tx.$queryRaw<{ id: string; controlMode: ControlMode }[]>`
+    SELECT id, "controlMode" FROM invoice_series WHERE "tenantId" = ${tenantId} AND type = 'INVOICE' AND "isActive" ORDER BY series LIMIT 1`;
   let controlNumber: string | null = null;
-  if (row.controlMode === "FREE_FORM") {
+  if (invoiceSeries?.controlMode === "FREE_FORM") {
     const [c] = await tx.$queryRaw<{ control: number | null; controlPrefix: string | null; controlTo: number | null }[]>`
-      UPDATE invoice_series SET "nextControl" = "nextControl" + 1
-      WHERE id = (SELECT id FROM invoice_series WHERE "tenantId" = ${tenantId} AND type = 'INVOICE' AND "isActive" ORDER BY series LIMIT 1)
+      UPDATE invoice_series SET "nextControl" = "nextControl" + 1 WHERE id = ${invoiceSeries.id}
       RETURNING "nextControl" - 1 AS control, "controlPrefix", "controlTo"`;
     if (!c || c.control === null) throw new OrderError("Configura el rango de números de control de tus formatos (Facturación > Configuración).");
     if (c.controlTo !== null && c.control > c.controlTo) {
