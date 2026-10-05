@@ -36,18 +36,19 @@ src/
   proxy.ts               # subdominio → /t/[domain]/…
   app/t/[domain]/
     (store)/             # tienda: portada, catálogo, producto, blog, checkout, seguimiento del pedido
-    admin/               # panel: resumen, pedidos, productos, tasas, entregas, apariencia
+    admin/               # panel: resumen, pedidos, productos, caja, clientes, tasas, cuentas, entregas, apariencia
     login/               # acceso del personal
   components/
     store/               # tarjeta de moda, precio dual, filtros, bolsa, buscador, cabecera
     admin/               # menú, formulario de tasas, gestor de colores
-  lib/                   # money, tax-ve, ve-ids, payments, rates, catalog, orders, variants, crm, theme, color
+  lib/                   # money, tax-ve, ve-ids, payments, rates, catalog, orders, variants, crm, cash, theme, color
   server/
     auth/  db.ts  tenant.ts
     queries/             # tienda (tasas, portada, catálogo facetado, producto) y edición de productos
     services/orders.ts   # pedido web con reserva, pagos, estados, anulación
+    services/cash.ts     # turnos de caja, venta en tienda con pagos mixtos y vuelto, cierre
     actions/             # login, búsqueda, checkout, pedidos, productos, tasas, entregas, apariencia
-tests/unit/              # venezuela, catalog, orders (y matriz de variantes), theme
+tests/unit/              # venezuela, catalog, orders (y matriz de variantes), cash, theme
 ```
 
 ## 3. Modelo de datos (resumen)
@@ -85,7 +86,15 @@ tests/unit/              # venezuela, catalog, orders (y matriz de variantes), t
 6. **Anular**: sin pago libera lo apartado; pagado devuelve la mercancía al stock (`RETURN`) y el reembolso se hace aparte.
 7. **Stock en el panel**: los cambios de la matriz se guardan como **diferencias** sobre el stock actual (no pisan ventas hechas mientras se editaba) y cada uno deja un movimiento con su motivo (compra, conteo, daño).
 
-Pendiente para producción: las **cuentas financieras** del checkout tienen datos de ejemplo y se editan en la fase 3; el **IGTF** de los pagos en divisas se calcula con la facturación (fase 4).
+Pendiente: el **IGTF** de los pagos en divisas se calcula con la facturación (fase 4).
+
+## 5b. Caja, cuentas y CRM (fase 3)
+
+- **Cuentas de cobro** (`/admin/cuentas`, solo la dueña): Pago Móvil, bancos en Bs y USD, punto de venta, cajas de efectivo, Zelle y USDT. La moneda la define el tipo. Las marcadas «en la tienda en línea» son las que ve la clienta al pagar; avisa si quedan datos de ejemplo.
+- **Turno de caja** (`/admin/caja`): se abre con el fondo en Bs y en USD. La venta en tienda busca por nombre, SKU o código de barras, aplica descuento (repartido entre las líneas antes del IVA) y acepta **pagos mixtos** en Bs, USD y USDT; cada pago queda en su moneda y cuenta, con sus equivalentes a tasa BCV. El stock se descuenta al momento.
+- **Vuelto**: si sobra, se entrega en Bs o en USD y queda como salida de efectivo de esa caja; no se permite dar más vuelto del efectivo que hay.
+- **Cierre**: por cada cuenta, esperado = fondo + cobros + entradas − salidas (efectivo) o cobros del turno (bancos y billeteras), contra lo contado; guarda la diferencia por cuenta y por moneda (`CashClosingLine`) y queda un reporte imprimible.
+- **CRM** (`/admin/clientes`): segmentos automáticos calculados al vuelo (VIP, Recurrente, Nueva, Inactiva, según `TenantSettings`), etiquetas manuales, mayoristas, cumpleañeras del mes, búsqueda por nombre, teléfono, cédula, correo o Instagram, y exportación CSV (dueña y encargada). La ficha muestra métricas (total, ticket promedio, frecuencia, método favorito, tallas y colores que compra), historial de compras de la web y de la tienda, y el seguimiento (notas, WhatsApp, llamadas, visitas).
 
 ## 6. Propuesta de componentes de interfaz
 
@@ -108,8 +117,9 @@ Pendiente para producción: las **cuentas financieras** del checkout tienen dato
 | `ProductForm` | ✅ | Datos, precio con margen, matriz talla × color con stock por celda (+/− visibles y motivo del cambio), SKU automático, nuevos colores y tallas al vuelo |
 | `ProductImages` | ✅ | Fotos verticales por color, orden (principal y hover), reducción en el navegador |
 | Envíos y entregas | ✅ | Retiro, delivery con costo y zona, envío nacional con costo o cobro a destino, envío gratis desde, horas de reserva |
-| Ficha del cliente (CRM) | Fase 3 | Datos, historial, métricas, etiquetas, interacciones |
-| Caja multimoneda | Fase 3 | Venta en tienda con pagos mixtos, cuentas y cierre por moneda |
+| Ficha del cliente (CRM) | ✅ | Datos, historial, métricas, segmentos y etiquetas, seguimiento, exportación CSV |
+| Caja multimoneda | ✅ | Venta en tienda con descuento, pagos mixtos, vuelto, entradas/salidas y cierre por cuenta y moneda |
+| Cuentas de cobro | ✅ | Alta y edición de las cuentas por tipo, visibles o no en la tienda en línea |
 | Factura / libro de ventas | Fase 4 | Emisión con número de control, notas de crédito, libro en Bs |
 | Editor del blog | Fase 4 | Markdown con vista previa, portada, productos enlazados, SEO |
 
@@ -119,6 +129,6 @@ Pendiente para producción: las **cuentas financieras** del checkout tienen dato
 |---|---|---|
 | 1 | Proyecto, esquema completo, seed de SF Boutique, tienda (portada, catálogo facetado, producto, bolsa, blog público), tasas BCV/P2P, apariencia, login | ✅ |
 | 2 | Panel de productos y stock por variante + checkout web con reporte de pago y reserva de stock + pedidos + envíos | ✅ |
-| 3 | CRM de clientes + **cuentas financieras editables** + caja multimoneda con cierre por moneda | Siguiente |
-| 4 | Facturación venezolana (series, número de control, notas, libro de ventas) + CMS del blog y banners | |
+| 3 | CRM de clientes + cuentas de cobro editables + caja multimoneda con cierre por moneda | ✅ |
+| 4 | Facturación venezolana (series, número de control, notas, libro de ventas, IGTF) + CMS del blog y banners | Siguiente |
 | 5 | Publicación (GitHub, Neon, Vercel, dominio) y reportes de gestión USD/Bs | |

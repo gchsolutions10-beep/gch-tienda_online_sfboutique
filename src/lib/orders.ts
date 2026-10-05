@@ -100,19 +100,21 @@ export function shippingFor(f: Fulfillment, subtotalCents: number, allFreeShippi
   return { available: enabled, cents: free ? 0 : price, payAtDestination: false, free: free && price > 0 };
 }
 
-export type PricingLine = { unitPriceCents: number; quantity: number; ivaExempt: boolean };
+export type PricingLine = { unitPriceCents: number; quantity: number; ivaExempt: boolean; discountCents?: number };
 
 /** Totales del pedido en USD (centavos) y su equivalente en Bs a la tasa BCV. El envío no lleva IVA. */
 export function priceOrder(lines: PricingLine[], tax: TaxSettings, shippingCents: number, bcvRate: number) {
   const taxes = computeTaxes(
-    lines.map((l) => ({ unitPriceCents: l.unitPriceCents, quantity: l.quantity, exempt: l.ivaExempt })),
+    lines.map((l) => ({ unitPriceCents: l.unitPriceCents, quantity: l.quantity, exempt: l.ivaExempt, discountCents: l.discountCents ?? 0 })),
     tax,
   );
   const subtotalCents = lines.reduce((a, l) => a + l.unitPriceCents * l.quantity, 0);
+  const discountCents = lines.reduce((a, l) => a + (l.discountCents ?? 0), 0);
   const totalCents = taxes.totalCents + shippingCents;
   return {
     lines: taxes.lines,
     subtotalCents,
+    discountCents,
     taxableCents: taxes.taxableCents,
     exemptCents: taxes.exemptCents,
     ivaCents: taxes.ivaCents,

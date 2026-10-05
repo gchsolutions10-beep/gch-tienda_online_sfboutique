@@ -10,10 +10,11 @@ const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerO
   { href: "/admin/tasas", label: "Tasas BCV / P2P", icon: "💱" },
   { href: "/admin/pedidos", label: "Pedidos", icon: "🧾" },
   { href: "/admin/productos", label: "Productos y stock", icon: "👗" },
-  { href: "#clientes", label: "Clientes (CRM)", icon: "👥", phase: 3 },
-  { href: "#caja", label: "Caja y cuentas", icon: "💵", phase: 3 },
+  { href: "/admin/caja", label: "Caja (venta en tienda)", icon: "💵" },
+  { href: "/admin/clientes", label: "Clientes (CRM)", icon: "👥" },
   { href: "#facturas", label: "Facturación", icon: "📑", phase: 4 },
   { href: "#blog", label: "Blog y lookbook", icon: "📝", phase: 4 },
+  { href: "/admin/cuentas", label: "Cuentas de cobro", icon: "🏦", ownerOnly: true },
   { href: "/admin/entregas", label: "Envíos y entregas", icon: "🚚", ownerOnly: true },
   { href: "/admin/apariencia", label: "Apariencia", icon: "🎨", ownerOnly: true },
 ];
