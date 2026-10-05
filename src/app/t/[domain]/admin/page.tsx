@@ -14,13 +14,20 @@ export default async function AdminHome({ params }: PageProps<"/t/[domain]/admin
   const tenant = await getTenant((await params).domain);
   await requireAdmin(tenant);
   const tdb = tenantDb(tenant.id);
-  const [rates, products, variants, customers, posts] = await Promise.all([
+  const [rates, products, variants, customers, posts, orderCounts] = await Promise.all([
     getCurrentRates(tenant.id),
     tdb.product.count({ where: { isActive: true } }),
     tdb.productVariant.findMany({ where: { isActive: true, product: { isActive: true } }, select: { stock: true, reserved: true, priceUsdOverride: true, product: { select: { priceUsd: true, costUsd: true } } } }),
     tdb.customer.count(),
     tdb.blogPost.count({ where: { status: "PUBLISHED" } }),
+    tdb.order.groupBy({ by: ["status"], where: { status: { in: ["PAYMENT_REVIEW", "PENDING", "PAID", "PREPARING"] } }, _count: { _all: true } }),
   ]);
+  const countOf = (...statuses: string[]) => orderCounts.filter((c) => statuses.includes(c.status)).reduce((a, c) => a + c._count._all, 0);
+  const todo = [
+    { n: countOf("PAYMENT_REVIEW"), label: "pagos por verificar", href: "/admin/pedidos?estado=verificar", urgent: true },
+    { n: countOf("PAID", "PREPARING"), label: "pedidos por preparar", href: "/admin/pedidos?estado=preparar", urgent: false },
+    { n: countOf("PENDING"), label: "esperando pago", href: "/admin/pedidos?estado=cobrar", urgent: false },
+  ].filter((t) => t.n > 0);
 
   const units = variants.reduce((a, v) => a + v.stock, 0);
   const soldOut = variants.filter((v) => v.stock - v.reserved <= 0).length;
@@ -38,6 +45,21 @@ export default async function AdminHome({ params }: PageProps<"/t/[domain]/admin
   return (
     <>
       <PageHeader title="Hola 👋" description={`Panel de ${tenant.name}`} />
+
+      {todo.length ? (
+        <section aria-label="Pendientes" className="mb-6 flex flex-wrap gap-3">
+          {todo.map((t) => (
+            <Link
+              key={t.href}
+              href={t.href}
+              className={cn(card, "flex items-center gap-3 px-4 py-3 transition hover:border-brand", t.urgent && "border-amber-300 bg-amber-50")}
+            >
+              <span className="font-display text-2xl font-bold">{t.n}</span>
+              <span className="text-sm font-semibold">{t.label} →</span>
+            </Link>
+          ))}
+        </section>
+      ) : null}
 
       <section className="mb-6 grid gap-4 lg:grid-cols-2">
         {(["bcv", "p2p"] as const).map((k) => {

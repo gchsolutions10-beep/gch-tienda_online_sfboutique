@@ -8,8 +8,8 @@ import { whatsappLink } from "@/lib/ve-ids";
 import { cn } from "@/components/ui/styles";
 
 /**
- * Bolsa lateral. Mientras se construye el checkout (fase 2), el pedido se
- * termina por WhatsApp con el detalle y los totales en USD y Bs.
+ * Bolsa lateral: lleva al checkout, o termina el pedido por WhatsApp con el
+ * detalle y los totales en USD y Bs.
  */
 export function BagDrawer({ rate, whatsapp, storeName }: { rate: number | null; whatsapp: string | null; storeName: string }) {
   const bag = useBag();
@@ -102,15 +102,22 @@ export function BagDrawer({ rate, whatsapp, storeName }: { rate: number | null; 
                 {rate ? <span className="text-xs text-store-muted">{formatVes(usdToVesCents(bag.cents, rate))}</span> : null}
               </span>
             </div>
-            <p className="text-xs text-store-muted">El envío, el IVA y el monto final en bolívares se confirman al procesar el pedido.</p>
+            <p className="text-xs text-store-muted">El envío y el monto final en bolívares se calculan en el siguiente paso.</p>
+            <Link
+              href="/checkout"
+              onClick={() => setOpen(false)}
+              className="block w-full rounded-full bg-brand px-4 py-3 text-center font-semibold text-on-brand hover:brightness-110"
+            >
+              Finalizar compra
+            </Link>
             {whatsapp ? (
               <a
                 href={whatsappLink(whatsapp, message)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="block w-full rounded-full bg-brand px-4 py-3 text-center font-semibold text-on-brand hover:brightness-110"
+                className="block w-full rounded-full border-2 border-store-ink px-4 py-2.5 text-center text-sm font-semibold hover:bg-store-ink hover:text-on-store-ink"
               >
-                Pedir por WhatsApp
+                O pedir por WhatsApp
               </a>
             ) : null}
             <button type="button" onClick={bag.clear} className="w-full text-xs font-semibold text-store-muted hover:text-danger">

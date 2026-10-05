@@ -8,12 +8,13 @@ import { cn } from "@/components/ui/styles";
 const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerOnly?: boolean }[] = [
   { href: "/admin", label: "Resumen", icon: "📊" },
   { href: "/admin/tasas", label: "Tasas BCV / P2P", icon: "💱" },
-  { href: "#productos", label: "Productos y stock", icon: "👗", phase: 2 },
-  { href: "#pedidos", label: "Pedidos", icon: "🧾", phase: 2 },
+  { href: "/admin/pedidos", label: "Pedidos", icon: "🧾" },
+  { href: "/admin/productos", label: "Productos y stock", icon: "👗" },
   { href: "#clientes", label: "Clientes (CRM)", icon: "👥", phase: 3 },
   { href: "#caja", label: "Caja y cuentas", icon: "💵", phase: 3 },
   { href: "#facturas", label: "Facturación", icon: "📑", phase: 4 },
   { href: "#blog", label: "Blog y lookbook", icon: "📝", phase: 4 },
+  { href: "/admin/entregas", label: "Envíos y entregas", icon: "🚚", ownerOnly: true },
   { href: "/admin/apariencia", label: "Apariencia", icon: "🎨", ownerOnly: true },
 ];
 

@@ -310,6 +310,21 @@ model TenantSettings {
   /// Reservar el stock de un pedido web sin pagar durante estas horas.
   reservationHours    Int      @default(24)
 
+  // ── Entrega (checkout web) ──
+  pickupEnabled           Boolean  @default(true)
+  /// Dirección y horario para retirar (se muestra en el checkout)
+  pickupInfo              String?
+  localDeliveryEnabled    Boolean  @default(true)
+  localDeliveryUsd        Decimal? @default(3) @db.Decimal(12, 2)
+  /// Zona que cubre el delivery: "Acarigua y Araure"
+  localDeliveryArea       String?
+  nationalShippingEnabled Boolean  @default(true)
+  /// Costo del envío nacional; vacío = cobro a destino (lo paga el cliente en la agencia)
+  nationalShippingUsd     Decimal? @db.Decimal(12, 2)
+
+  /// Próximo número visible de pedido (#1001). Se incrementa dentro de la transacción.
+  nextOrderNumber Int @default(1001)
+
   // ── CRM: segmentación automática ──
   vipMinSpentUsd     Decimal @default(500) @db.Decimal(12, 2)
   recurrentMinOrders Int     @default(3)
@@ -868,6 +883,7 @@ model Order {
   payments    Payment[]
   invoices    Invoice[]
   movements   StockMovement[]
+  events      OrderEvent[]
 
   @@unique([tenantId, number])
   @@index([tenantId, status, createdAt])
@@ -900,6 +916,24 @@ model OrderItem {
 
   @@index([orderId])
   @@map("order_items")
+}
+
+/// Historial del pedido: cambios de estado, pagos y notas (lo ve el personal).
+model OrderEvent {
+  id         String       @id @default(cuid())
+  orderId    String
+  fromStatus OrderStatus?
+  toStatus   OrderStatus?
+  note       String?
+  /// Quién lo hizo (vacío = el cliente o el sistema)
+  userId     String?
+  userName   String?
+  createdAt  DateTime     @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+  @@map("order_events")
 }
 
 /// Un pago (un pedido puede tener varios: parte en Bs y parte en USD).
