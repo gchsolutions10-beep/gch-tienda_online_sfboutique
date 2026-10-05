@@ -159,7 +159,7 @@ const saleInput = z.object({
   notes: z.string().trim().max(300),
 });
 
-export async function storeSale(raw: unknown): Promise<Result<{ number: number; change: number; changeCurrency: string }>> {
+export async function storeSale(raw: unknown): Promise<Result<{ id: string; number: number; change: number; changeCurrency: string }>> {
   const { tenant, actor } = await cashier();
   const parsed = saleInput.safeParse(raw);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Revisa la venta" };
@@ -182,7 +182,7 @@ export async function storeSale(raw: unknown): Promise<Result<{ number: number; 
       },
       actor,
     );
-    return { ok: true, number: r.number, change: r.change, changeCurrency: r.changeCurrency };
+    return { ok: true, id: r.id, number: r.number, change: r.change, changeCurrency: r.changeCurrency };
   });
 }
 

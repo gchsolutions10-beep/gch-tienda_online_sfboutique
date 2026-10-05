@@ -107,7 +107,9 @@ export async function createStoreSale(tenantId: string, sessionId: string, input
     if (method.needsReference && !p.reference && !isCashAccount(a.type)) throw new OrderError(`Falta la referencia del pago con ${method.label}.`);
     return { ...p, currency: a.currency };
   });
-  const tender = tenderStatus(t.totalCents, payments.map((p) => ({ currency: p.currency, cents: p.cents })), bcv, input.changeCurrency);
+  const tender = tenderStatus(t.totalCents, payments.map((p) => ({ currency: p.currency, cents: p.cents })), bcv, input.changeCurrency, settings.igtfRateBp);
+  // Parte de cada pago en divisas que cubre la venta (base del IGTF).
+  const igtfBases = splitDiscount(payments.map((p) => (p.currency === "VES" ? 0 : p.cents)), tender.igtfBaseUsd);
   if (!tender.complete) throw new OrderError("Los pagos no cubren el total.");
   const changeAccount = tender.change > 0 ? accounts.find((a) => isCashAccount(a.type) && a.currency === input.changeCurrency) : null;
   if (tender.change > 0 && !changeAccount) throw new OrderError(`No hay una caja de efectivo en ${input.changeCurrency} para dar el vuelto.`);
@@ -159,6 +161,8 @@ export async function createStoreSale(tenantId: string, sessionId: string, input
         bcvRate: String(bcv),
         totalVes: money(t.totalVesCents),
         paidUsd: money(t.totalCents),
+        igtfUsd: money(tender.igtfUsd),
+        igtfBaseUsd: money(tender.igtfBaseUsd),
         notes: input.notes,
         createdById: actor.id,
         cashSessionId: sessionId,
@@ -190,7 +194,7 @@ export async function createStoreSale(tenantId: string, sessionId: string, input
         data: { tenantId, variantId: l.v.id, type: "SALE", quantity: -l.quantity, stockAfter: l.v.stock, orderId: order.id, userId: actor.id },
       });
     }
-    for (const p of payments) {
+    for (const [i, p] of payments.entries()) {
       const amounts = paymentAmounts(p.currency, p.cents, { bcv, p2p: rates.p2p?.rate ?? null });
       await tx.payment.create({
         data: {
@@ -204,6 +208,8 @@ export async function createStoreSale(tenantId: string, sessionId: string, input
           rateSource: amounts.rateSource,
           amountUsd: money(amounts.amountUsdCents),
           amountVes: money(amounts.amountVesCents),
+          igtfAmount: money(tender.igtfByLine[i]),
+          igtfBase: money(igtfBases[i]),
           financialAccountId: p.accountId,
           reference: p.reference,
           reviewedById: actor.id,
@@ -227,7 +233,7 @@ export async function createStoreSale(tenantId: string, sessionId: string, input
       });
     }
     await refreshCustomerStats(tx, customer?.id ?? null);
-    return { id: order.id, number: order.number, change: tender.change, changeCurrency: input.changeCurrency };
+    return { id: order.id, number: order.number, change: tender.change, changeCurrency: input.changeCurrency, igtfUsd: tender.igtfUsd };
   });
 }
 

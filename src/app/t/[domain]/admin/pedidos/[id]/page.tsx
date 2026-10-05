@@ -4,13 +4,15 @@ import { getTenant } from "@/server/tenant";
 import { CASHIER_ROLES, requireStaff } from "@/server/auth/guards";
 import { tenantDb } from "@/server/db";
 import { getCurrentRates } from "@/server/queries/store";
+import { getDeliverySettings } from "@/server/services/orders";
 import { OrderStatusBadge, PaymentStatusText } from "@/components/admin/order-badges";
 import { OrderActions, PaymentReview } from "@/components/admin/order-actions";
-import { card, cn } from "@/components/ui/styles";
+import { buttonPrimary, card, cn } from "@/components/ui/styles";
 import { formatMoney, formatRate, formatUsd, formatVes, toCents } from "@/lib/money";
 import { CARRIERS, FULFILLMENT, nextStatus, NEXT_ACTION, ORDER_STATUS, timeLeft } from "@/lib/orders";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/payments";
 import { formatVeId, formatVePhone, whatsappLink } from "@/lib/ve-ids";
+import { formatInvoiceNumber, INVOICE_TYPE } from "@/lib/invoicing";
 
 export const metadata = { title: "Pedido" };
 
@@ -33,12 +35,14 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
       payments: { orderBy: { createdAt: "asc" }, include: { financialAccount: { select: { name: true } }, reviewedBy: { select: { name: true, email: true } } } },
       events: { orderBy: { createdAt: "desc" } },
       customer: { select: { id: true, ordersCount: true, totalSpentUsd: true } },
+      invoices: { orderBy: { issuedAt: "asc" }, select: { id: true, type: true, number: true, status: true, controlNumber: true, totalVes: true, series: { select: { series: true } } } },
     },
   });
   if (!order) notFound();
-  const [accounts, rates] = await Promise.all([
+  const [accounts, rates, settings] = await Promise.all([
     tdb.financialAccount.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true, type: true, currency: true } }),
     getCurrentRates(tenant.id),
+    getDeliverySettings(tenant.id),
   ]);
 
   const total = toCents(order.totalUsd);
@@ -81,6 +85,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
                       <p className="font-semibold">
                         {PAYMENT_METHODS[p.method].icon} {PAYMENT_METHODS[p.method].label} · {formatMoney(toCents(p.amount), p.currency)}
                         {p.currency === "VES" ? <span className="font-normal text-muted"> ≈ {formatUsd(toCents(p.amountUsd))} a {formatRate(Number(p.rate))}</span> : null}
+                        {toCents(p.igtfAmount) > 0 ? <span className="font-normal text-muted"> · incluye IGTF {formatMoney(toCents(p.igtfAmount), p.currency)}</span> : null}
                       </p>
                       <p className="text-xs text-muted">
                         {[
@@ -145,6 +150,12 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
               <div className="flex justify-between text-muted"><dt>IVA {Math.round(Number(order.ivaRate) * 100)} %</dt><dd>{formatUsd(toCents(order.ivaUsd))}</dd></div>
               <div className="flex justify-between"><dt>Envío</dt><dd>{formatUsd(toCents(order.shippingUsd))}</dd></div>
               <div className="flex justify-between border-t border-line pt-1 font-bold"><dt>Total</dt><dd>{formatUsd(total)}</dd></div>
+              {toCents(order.igtfUsd) > 0 ? (
+                <div className="flex justify-between text-muted">
+                  <dt>+ IGTF (sobre {formatUsd(toCents(order.igtfBaseUsd))} en divisas)</dt>
+                  <dd>{formatUsd(toCents(order.igtfUsd))}</dd>
+                </div>
+              ) : null}
               <div className="flex justify-between text-xs text-muted">
                 <dt>En Bs (BCV {formatRate(Number(order.bcvRate))})</dt>
                 <dd>{formatVes(toCents(order.totalVes))}</dd>
@@ -181,11 +192,35 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
             carrier={order.carrier}
             carriers={[...CARRIERS]}
             remainingUsdCents={remaining}
+            igtfRateBp={settings.igtfRateBp}
             bcvRate={rates.bcv?.rate ?? Number(order.bcvRate)}
             accounts={accounts}
             methods={(Object.keys(PAYMENT_METHODS) as PaymentMethod[]).map((m) => ({ method: m, label: PAYMENT_METHODS[m].label, currency: PAYMENT_METHODS[m].currency, accountTypes: PAYMENT_METHODS[m].accountTypes }))}
             internalNote={order.internalNote}
           />
+
+          {order.invoices.length || (order.paidAt && order.status !== "CANCELLED") ? (
+            <section className={cn(card, "p-5 text-sm")}>
+              <h2 className="text-lg font-bold">Factura</h2>
+              {order.invoices.length ? (
+                <ul className="mt-2 divide-y divide-line">
+                  {order.invoices.map((inv) => (
+                    <li key={inv.id} className={cn("flex justify-between gap-2 py-2", inv.status === "VOIDED" && "text-muted line-through")}>
+                      <Link href={`/admin/facturacion/${inv.id}`} className="font-semibold text-brand-strong underline">
+                        {INVOICE_TYPE[inv.type].label} {formatInvoiceNumber(inv.series.series, inv.number)}
+                      </Link>
+                      <span>{formatVes(toCents(inv.totalVes))}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {order.paidAt && order.status !== "CANCELLED" && !order.invoices.some((i) => i.type === "INVOICE" && i.status === "ISSUED") ? (
+                <Link href={`/admin/facturacion/emitir/${order.id}`} className={cn(buttonPrimary, "mt-3 w-full")}>
+                  📑 Emitir factura
+                </Link>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className={cn(card, "p-5 text-sm")}>
             <h2 className="text-lg font-bold">Clienta</h2>

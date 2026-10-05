@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { quickCreateCustomer, searchCustomers, searchSaleItems, storeSale } from "@/server/actions/admin/cash";
 import { fromUsdCents, splitDiscount, tenderStatus } from "@/lib/cash";
 import { priceOrder } from "@/lib/orders";
-import type { TaxSettings } from "@/lib/tax-ve";
+import { withIgtf, type TaxSettings } from "@/lib/tax-ve";
 import { formatMoney, formatRate, formatUsd, formatVes, parseAmount, usdToVesCents, type Currency } from "@/lib/money";
 import type { FinancialAccountType, PaymentMethod } from "@/lib/payments";
 import { buttonGhost, buttonPrimary, buttonSecondary, card, cn, inputBase, inputClass, labelClass } from "@/components/ui/styles";
@@ -21,7 +22,22 @@ const toInput = (cents: number) => (cents / 100).toFixed(2).replace(".", ",");
 const amountCents = (s: string) => Math.round((parseAmount(s) ?? 0) * 100);
 
 /** Venta en la tienda física con pagos mixtos (Bs, USD, USDT) y vuelto. */
-export function StoreSale({ sessionId, bcvRate, accounts, methods, tax }: { sessionId: string; bcvRate: number; accounts: Account[]; methods: Method[]; tax: TaxSettings }) {
+export function StoreSale({
+  sessionId,
+  bcvRate,
+  accounts,
+  methods,
+  tax,
+  igtfRateBp,
+}: {
+  sessionId: string;
+  bcvRate: number;
+  accounts: Account[];
+  methods: Method[];
+  tax: TaxSettings;
+  /** IGTF sobre pagos en divisas (0 = no se cobra) */
+  igtfRateBp: number;
+}) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Item[]>([]);
@@ -31,7 +47,7 @@ export function StoreSale({ sessionId, bcvRate, accounts, methods, tax }: { sess
   const [pays, setPays] = useState<PayLine[]>([]);
   const [changeCurrency, setChangeCurrency] = useState<"VES" | "USD">("VES");
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ text: string; orderId: string } | null>(null);
   const [pending, start] = useTransition();
   const search = useRef<HTMLInputElement>(null);
   const nextKey = useRef(1);
@@ -57,9 +73,9 @@ export function StoreSale({ sessionId, bcvRate, accounts, methods, tax }: { sess
   const totalCents = priced.totalCents;
   const ivaIncluded = tax.ivaEnabled && tax.taxMode === "PRICE_INCLUDES_TAX";
   const tender = useMemo(
-    () => tenderStatus(totalCents, pays.map((p) => ({ currency: currencyOf(p), cents: amountCents(p.amount) })), bcvRate, changeCurrency),
+    () => tenderStatus(totalCents, pays.map((p) => ({ currency: currencyOf(p), cents: amountCents(p.amount) })), bcvRate, changeCurrency, igtfRateBp),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- currencyOf depende de pays y accounts
-    [totalCents, pays, bcvRate, changeCurrency, accounts],
+    [totalCents, pays, bcvRate, changeCurrency, accounts, igtfRateBp],
   );
 
   function add(item: Item) {
@@ -77,7 +93,8 @@ export function StoreSale({ sessionId, bcvRate, accounts, methods, tax }: { sess
   function addPayment(method: PaymentMethod) {
     const acc = accountsFor(method)[0];
     const currency = acc?.currency ?? methods.find((m) => m.method === method)!.currency;
-    const due = fromUsdCents(currency, tender.remainingUsd, bcvRate);
+    // En divisas se cobra lo que falta más el IGTF.
+    const due = currency === "VES" ? fromUsdCents(currency, tender.remainingUsd, bcvRate) : withIgtf(tender.remainingUsd, igtfRateBp);
     setPays((p) => [...p, { key: nextKey.current++, method, accountId: acc?.id ?? "", amount: due ? toInput(due) : "", reference: "" }]);
   }
   const patch = (key: number, data: Partial<PayLine>) => setPays((p) => p.map((x) => (x.key === key ? { ...x, ...data } : x)));
@@ -95,7 +112,7 @@ export function StoreSale({ sessionId, bcvRate, accounts, methods, tax }: { sess
         notes: "",
       });
       if (!r.ok) return setError(r.error);
-      setDone(`Venta #${r.number} registrada.${r.change > 0 ? ` Vuelto: ${formatMoney(r.change, r.changeCurrency as Currency)}` : ""}`);
+      setDone({ text: `Venta #${r.number} registrada.${r.change > 0 ? ` Vuelto: ${formatMoney(r.change, r.changeCurrency as Currency)}` : ""}`, orderId: r.id });
       setCart([]);
       setPays([]);
       setDiscount("");
@@ -155,7 +172,14 @@ export function StoreSale({ sessionId, bcvRate, accounts, methods, tax }: { sess
           ) : null}
         </div>
 
-        {done ? <p role="status" className="mt-3 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">✓ {done}</p> : null}
+        {done ? (
+          <p role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">
+            ✓ {done.text}
+            <Link href={`/admin/facturacion/emitir/${done.orderId}`} className="underline">
+              📑 Emitir factura
+            </Link>
+          </p>
+        ) : null}
 
         {cart.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted">Busca una prenda para empezar la venta.</p>
@@ -256,6 +280,12 @@ export function StoreSale({ sessionId, bcvRate, accounts, methods, tax }: { sess
         {pays.length ? (
           <dl className="space-y-1 text-sm">
             <div className="flex justify-between"><dt>Pagado</dt><dd className="font-semibold">{formatUsd(tender.paidUsd)}</dd></div>
+            {tender.igtfUsd ? (
+              <div className="flex justify-between text-muted">
+                <dt>IGTF {igtfRateBp / 100} % (sobre {formatUsd(tender.igtfBaseUsd)} en divisas)</dt>
+                <dd>{formatUsd(tender.igtfUsd)}</dd>
+              </div>
+            ) : null}
             {tender.remainingUsd ? (
               <div className="flex justify-between text-amber-800">
                 <dt>Falta</dt>
@@ -279,7 +309,7 @@ export function StoreSale({ sessionId, bcvRate, accounts, methods, tax }: { sess
 
         {error ? <p role="alert" className="rounded-lg bg-red-50 p-2 text-sm font-semibold text-danger">{error}</p> : null}
         <button type="button" disabled={pending || !cart.length || !tender.complete || !pays.length} onClick={charge} className={cn(buttonPrimary, "w-full py-3.5 text-base")}>
-          {pending ? "Registrando…" : `Cobrar ${formatUsd(totalCents)}`}
+          {pending ? "Registrando…" : `Cobrar ${formatUsd(totalCents + tender.igtfUsd)}`}
         </button>
       </section>
     </div>

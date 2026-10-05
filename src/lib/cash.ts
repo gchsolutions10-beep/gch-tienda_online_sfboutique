@@ -3,6 +3,7 @@
  * vuelto y cierre por cuenta y por moneda.
  */
 import { usdToVesCents, vesToUsdCents, type Currency } from "@/lib/money";
+import { splitIgtf } from "@/lib/tax-ve";
 
 export type AccountKind = "BANK_VES" | "PAGO_MOVIL" | "POS_TERMINAL" | "CASH_VES" | "CASH_USD" | "ZELLE" | "BANK_USD" | "CRYPTO_USDT";
 
@@ -23,15 +24,26 @@ export type TenderLine = { currency: Currency; cents: number };
 /**
  * Estado del cobro: cuánto falta o cuánto sobra (vuelto) en USD, y el vuelto
  * expresado en la moneda en que se va a devolver.
+ *
+ * IGTF (si `igtfRateBp` > 0): los pagos en Bs cubren primero; la parte del
+ * total que se paga en divisas lleva el IGTF encima. El vuelto no paga IGTF.
+ * `igtfByLine` reparte el impuesto entre los pagos en divisas (0 en los de Bs).
  */
-export function tenderStatus(totalUsdCents: number, lines: TenderLine[], bcvRate: number, changeCurrency: Currency = "VES") {
-  const paidUsd = lines.reduce((a, l) => a + toUsdCents(l.currency, l.cents, bcvRate), 0);
-  const diff = paidUsd - totalUsdCents;
+export function tenderStatus(totalUsdCents: number, lines: TenderLine[], bcvRate: number, changeCurrency: Currency = "VES", igtfRateBp = 0) {
+  const vesUsd = lines.filter((l) => l.currency === "VES").reduce((a, l) => a + toUsdCents(l.currency, l.cents, bcvRate), 0);
+  const divisa = lines.filter((l) => l.currency !== "VES").reduce((a, l) => a + l.cents, 0);
+  const split = splitIgtf(divisa, totalUsdCents - vesUsd, igtfRateBp);
+  const paidUsd = vesUsd + divisa;
+  const diff = paidUsd - split.igtf - totalUsdCents;
   // 1 centavo de tolerancia por el redondeo de la conversión.
   const remainingUsd = diff < -1 ? -diff : 0;
   const changeUsd = diff > 1 ? diff : 0;
   return {
     paidUsd,
+    igtfUsd: split.igtf,
+    /** Parte del total pagada en divisas (base del IGTF) */
+    igtfBaseUsd: split.covered,
+    igtfByLine: splitDiscount(lines.map((l) => (l.currency === "VES" ? 0 : l.cents)), split.igtf),
     remainingUsd,
     changeUsd,
     change: fromUsdCents(changeCurrency, changeUsd, bcvRate),
@@ -45,7 +57,9 @@ export function splitDiscount(lineGrossCents: number[], discountCents: number): 
   if (total <= 0 || discountCents <= 0) return lineGrossCents.map(() => 0);
   const d = Math.min(discountCents, total);
   const out = lineGrossCents.map((g) => Math.floor((g * d) / total));
-  out[out.length - 1] += d - out.reduce((a, b) => a + b, 0);
+  // El redondeo va a la última línea con importe (nunca a una en cero).
+  const last = lineGrossCents.findLastIndex((g) => g > 0);
+  out[last] += d - out.reduce((a, b) => a + b, 0);
   return out;
 }
 
