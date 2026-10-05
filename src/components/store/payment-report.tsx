@@ -73,13 +73,26 @@ function CopyRow({ name, value }: { name: string; value: string }) {
 }
 
 /** Elegir método, ver los datos de la cuenta y reportar el pago (con captura opcional). */
-export function PaymentReport({ token, methods, remainingUsdCents, bcvRate }: { token: string; methods: MethodOption[]; remainingUsdCents: number; bcvRate: number }) {
+export function PaymentReport({
+  token,
+  methods,
+  remainingUsdCents,
+  bcvRate,
+  igtfRateBp = 0,
+}: {
+  token: string;
+  methods: MethodOption[];
+  remainingUsdCents: number;
+  bcvRate: number;
+  /** IGTF que se suma a los pagos en divisas (0 = no aplica) */
+  igtfRateBp?: number;
+}) {
   const router = useRouter();
   const [methodKey, setMethodKey] = useState<PaymentMethod>(methods[0].method);
   const method = methods.find((m) => m.method === methodKey) ?? methods[0];
   const [accountId, setAccountId] = useState(method.accounts[0]?.id ?? "");
   const account = method.accounts.find((a) => a.id === accountId) ?? method.accounts[0];
-  const due = amountDueIn(method.currency, remainingUsdCents, bcvRate);
+  const due = amountDueIn(method.currency, remainingUsdCents, bcvRate, igtfRateBp);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -136,6 +149,10 @@ export function PaymentReport({ token, methods, remainingUsdCents, bcvRate }: { 
         {isVes ? (
           <p className="text-xs text-store-muted">
             {formatUsd(remainingUsdCents)} a la tasa BCV de hoy ({formatRate(bcvRate)})
+          </p>
+        ) : igtfRateBp > 0 ? (
+          <p className="text-xs text-store-muted">
+            {formatUsd(remainingUsdCents)} + IGTF {igtfRateBp / 100} % por pagar en divisas ({formatUsd(due - remainingUsdCents)}). En bolívares no se cobra.
           </p>
         ) : null}
 

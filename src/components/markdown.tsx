@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 /**
  * Markdown sencillo y SEGURO para el blog (sin HTML crudo, sin
  * dangerouslySetInnerHTML): párrafos, ## títulos, listas, **negrita**,
- * *cursiva* y [enlaces](https://…). Suficiente para artículos de moda.
+ * *cursiva*, [enlaces](https://…) y fotos ![descripción](/marca/blog-…) en
+ * su propio párrafo. Suficiente para artículos de moda.
  */
 export function Markdown({ source }: { source: string }) {
   const blocks = source.replace(/\r\n/g, "\n").split(/\n{2,}/);
@@ -34,6 +35,17 @@ export function Markdown({ source }: { source: string }) {
           );
         }
         if (b.startsWith("> ")) return <blockquote key={i} className="border-l-4 border-accent pl-4 italic">{inline(b.replace(/^> /gm, ""))}</blockquote>;
+        // Foto del lookbook: ![descripción](/marca/blog-…) — solo imágenes del negocio o https.
+        const img = /^!\[([^\]]*)\]\((\/marca\/[a-z0-9-]+(?:\?v=\d+)?|https:\/\/[^\s)]+)\)$/.exec(b);
+        if (img) {
+          return (
+            <figure key={i} className="my-6">
+              {/* eslint-disable-next-line @next/next/no-img-element -- foto del artículo */}
+              <img src={img[2]} alt={img[1]} loading="lazy" className="w-full rounded-2xl object-cover" />
+              {img[1] ? <figcaption className="mt-2 text-center text-sm opacity-70">{img[1]}</figcaption> : null}
+            </figure>
+          );
+        }
         return <p key={i}>{inline(b)}</p>;
       })}
     </div>

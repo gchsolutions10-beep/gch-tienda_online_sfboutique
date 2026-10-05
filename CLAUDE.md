@@ -12,10 +12,11 @@ Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSo
   commit en una rama `fase-N-…`, unir a `main` cuando lo pida, y explicar qué se hizo y qué falta.
 
 ## Estado (5 de octubre de 2026)
-- Fases 1–3 listas y publicadas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago,
-  pedidos, productos/stock, envíos, cuentas de cobro, caja multimoneda con cierre, CRM. Detalle en `docs/ARQUITECTURA.md`.
-- **Siguiente: Fase 4** — facturación venezolana (series, número de control de imprenta digital autorizada, notas de
-  crédito, libro de ventas en Bs, IGTF 3 % en pagos en divisas) + editor del blog y banners/portada.
+- Fases 1–4 listas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago, pedidos,
+  productos/stock, envíos, cuentas de cobro, caja multimoneda con cierre, CRM, **facturación venezolana con IGTF**
+  (facturas, notas de crédito/débito, número de control, libro de ventas) y **editor del blog, portada y banners**.
+  Detalle en `docs/ARQUITECTURA.md` (sección 5c para la fase 4).
+- **Siguiente: Fase 5** — reportes de gestión USD/Bs y dominio propio (cuando el usuario lo pida).
 - Lo legal/fiscal (IVA, IGTF, número de control) se marca siempre «validar con el contador»; el sistema no sustituye a la
   imprenta digital: guarda el número de control que ella asigna.
 
@@ -40,8 +41,9 @@ Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSo
 - Local (en la computadora del usuario, Windows): `npm run db:local` (prisma dev en puertos fijos 51217–51219; si dice
   «puerto ocupado» es que ya está encendida) y `npm run dev -- --port 3001` → `http://sfboutique.localhost:3001`.
   Sabrosito (otro proyecto) usa los puertos 51213–51216.
-- En una sesión en la nube no hay base local: verifica con `npm test`, `npm run typecheck`, `npm run lint` y
-  `npm run build`, y en la vista previa de Vercel de la rama.
+- En una sesión en la nube: verifica con `npm test`, `npm run typecheck`, `npm run lint` y `npm run build`. Además,
+  `npx prisma dev` funciona en la nube (base temporal en el puerto 51214): `prisma migrate deploy`, el seed con
+  `SEED_ADMIN_EMAIL`/`SEED_ADMIN_PASSWORD` y `npx tsx tests/integration/facturacion.ts` para probar de punta a punta.
 
 ## Detalles que ya costaron tiempo
 - Al agregar rutas nuevas con el servidor de desarrollo corriendo pueden dar 404: borra `.next/dev` y reinicia.

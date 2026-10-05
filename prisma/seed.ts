@@ -129,10 +129,12 @@ async function main() {
     },
   });
 
-  // Limpia los datos de demo para poder volver a correr el seed
+  // Limpia los datos de demo para poder volver a correr el seed (primero las notas, luego las facturas: se protegen entre sí)
+  await db.invoice.deleteMany({ where: { tenantId, relatedInvoiceId: { not: null } } });
+  await db.invoice.deleteMany({ where: { tenantId } });
   await db.order.deleteMany({ where: { tenantId } });
   await db.cashSession.deleteMany({ where: { tenantId } });
-  await db.tenantAsset.deleteMany({ where: { tenantId, OR: [{ kind: { startsWith: "comprobante-" } }, { kind: { startsWith: "producto-" } }] } });
+  await db.tenantAsset.deleteMany({ where: { tenantId, OR: ["comprobante-", "producto-", "banner-", "portada-", "blog-"].map((p) => ({ kind: { startsWith: p } })) } });
   await db.blogPost.deleteMany({ where: { tenantId } });
   await db.product.deleteMany({ where: { tenantId } });
   await db.category.deleteMany({ where: { tenantId } });
@@ -143,6 +145,7 @@ async function main() {
   await db.financialAccount.deleteMany({ where: { tenantId } });
   await db.exchangeRate.deleteMany({ where: { tenantId } });
   await db.heroCard.deleteMany({ where: { tenantId } });
+  await db.promoBanner.deleteMany({ where: { tenantId } });
   await db.blogCategory.deleteMany({ where: { tenantId } });
   await db.invoiceSeries.deleteMany({ where: { tenantId } });
 

@@ -2,7 +2,7 @@
  * Reglas puras de los pedidos: estados, entrega, totales y SKU.
  * Sin BD ni Next, para poder probarlas.
  */
-import { computeTaxes, type TaxSettings } from "@/lib/tax-ve";
+import { computeTaxes, withIgtf, type TaxSettings } from "@/lib/tax-ve";
 import { usdToVesCents, vesToUsdCents, type Currency } from "@/lib/money";
 
 export type OrderStatus = "PENDING" | "PAYMENT_REVIEW" | "PAID" | "PREPARING" | "READY" | "SHIPPED" | "DELIVERED" | "CANCELLED";
@@ -124,9 +124,12 @@ export function priceOrder(lines: PricingLine[], tax: TaxSettings, shippingCents
   };
 }
 
-/** Monto sugerido para pagar lo que falta (en la moneda del método), a la tasa BCV del pedido. */
-export function amountDueIn(currency: Currency, remainingUsdCents: number, bcvRate: number): number {
-  return currency === "VES" ? usdToVesCents(remainingUsdCents, bcvRate) : remainingUsdCents;
+/**
+ * Monto sugerido para pagar lo que falta (en la moneda del método), a la tasa
+ * BCV. En divisas suma el IGTF si el negocio lo cobra (`igtfRateBp` > 0).
+ */
+export function amountDueIn(currency: Currency, remainingUsdCents: number, bcvRate: number, igtfRateBp = 0): number {
+  return currency === "VES" ? usdToVesCents(remainingUsdCents, bcvRate) : withIgtf(remainingUsdCents, igtfRateBp);
 }
 
 /** Pagos que cubren el total (con 1 centavo de tolerancia por redondeo de la conversión). */

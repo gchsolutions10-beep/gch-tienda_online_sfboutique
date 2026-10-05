@@ -80,6 +80,7 @@ export function OrderActions({
   carrier,
   carriers,
   remainingUsdCents,
+  igtfRateBp,
   bcvRate,
   accounts,
   methods,
@@ -91,6 +92,8 @@ export function OrderActions({
   carrier: string | null;
   carriers: string[];
   remainingUsdCents: number;
+  /** IGTF sobre pagos en divisas (0 = no se cobra) */
+  igtfRateBp: number;
   bcvRate: number;
   accounts: Account[];
   methods: MethodInfo[];
@@ -101,7 +104,7 @@ export function OrderActions({
   const [method, setMethod] = useState<PaymentMethod>("PAGO_MOVIL");
   const info = methods.find((m) => m.method === method)!;
   const methodAccounts = accounts.filter((a) => info.accountTypes.includes(a.type));
-  const due = amountDueIn(info.currency, remainingUsdCents, bcvRate);
+  const due = amountDueIn(info.currency, remainingUsdCents, bcvRate, igtfRateBp);
   const closed = status === "CANCELLED" || status === "DELIVERED";
 
   return (
@@ -167,7 +170,10 @@ export function OrderActions({
               <input name="reference" placeholder="Referencia" className={inputClass} />
             </div>
             <input name="payerName" placeholder="Quién pagó (opcional)" className={inputClass} />
-            <p className="text-xs text-muted">Falta {formatMoney(due, info.currency)}</p>
+            <p className="text-xs text-muted">
+              Falta {formatMoney(due, info.currency)}
+              {info.currency !== "VES" && igtfRateBp > 0 ? ` (incluye IGTF ${igtfRateBp / 100} %)` : ""}
+            </p>
             <div className="flex gap-2">
               <button disabled={pending} className={cn(buttonPrimary, "flex-1")}>Registrar</button>
               <button type="button" onClick={() => setPanel(null)} className={buttonSecondary}>Cancelar</button>

@@ -5,23 +5,24 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/components/ui/styles";
 
 /** phase: módulo diseñado (tablas listas) que se construye en esa fase. */
-const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerOnly?: boolean }[] = [
+const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerOnly?: boolean; contentOnly?: boolean }[] = [
   { href: "/admin", label: "Resumen", icon: "📊" },
   { href: "/admin/tasas", label: "Tasas BCV / P2P", icon: "💱" },
   { href: "/admin/pedidos", label: "Pedidos", icon: "🧾" },
   { href: "/admin/productos", label: "Productos y stock", icon: "👗" },
   { href: "/admin/caja", label: "Caja (venta en tienda)", icon: "💵" },
   { href: "/admin/clientes", label: "Clientes (CRM)", icon: "👥" },
-  { href: "#facturas", label: "Facturación", icon: "📑", phase: 4 },
-  { href: "#blog", label: "Blog y lookbook", icon: "📝", phase: 4 },
+  { href: "/admin/facturacion", label: "Facturación", icon: "📑" },
+  { href: "/admin/blog", label: "Blog y lookbook", icon: "📝", contentOnly: true },
+  { href: "/admin/portada", label: "Portada y banners", icon: "🖼️", contentOnly: true },
   { href: "/admin/cuentas", label: "Cuentas de cobro", icon: "🏦", ownerOnly: true },
   { href: "/admin/entregas", label: "Envíos y entregas", icon: "🚚", ownerOnly: true },
   { href: "/admin/apariencia", label: "Apariencia", icon: "🎨", ownerOnly: true },
 ];
 
-export function AdminNav({ owner }: { owner: boolean }) {
+export function AdminNav({ owner, content }: { owner: boolean; content: boolean }) {
   const pathname = usePathname();
-  const items = ITEMS.filter((i) => owner || !i.ownerOnly);
+  const items = ITEMS.filter((i) => (owner || !i.ownerOnly) && (content || !i.contentOnly));
   const active = items.filter((i) => !i.phase && (pathname === i.href || pathname.startsWith(`${i.href}/`))).sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   return (

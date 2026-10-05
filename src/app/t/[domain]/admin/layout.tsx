@@ -18,8 +18,8 @@ export default async function AdminLayout({ children, params }: LayoutProps<"/t/
   const ctx = await requireAdmin(tenant);
 
   return (
-    <div className="min-h-dvh bg-cream text-ink lg:grid lg:grid-cols-[250px_1fr]">
-      <aside className="border-b border-line bg-paper lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r">
+    <div className="min-h-dvh bg-cream text-ink print:block print:bg-white lg:grid lg:grid-cols-[250px_1fr]">
+      <aside className="border-b border-line bg-paper print:hidden lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-b-0 lg:border-r">
         <Link href="/" className="flex shrink-0 items-center gap-3 px-5 py-4" title="Ver la tienda">
           {tenant.logoUrl ? <TenantLogo src={tenant.logoUrl} alt="" className="size-9" sizes="36px" /> : null}
           <div className="min-w-0">
@@ -27,7 +27,7 @@ export default async function AdminLayout({ children, params }: LayoutProps<"/t/
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Administración</p>
           </div>
         </Link>
-        <AdminNav owner={isTenantAdmin(ctx)} />
+        <AdminNav owner={isTenantAdmin(ctx)} content={isTenantAdmin(ctx) || ctx.roles.includes("EDITOR")} />
         <div className="hidden shrink-0 border-t border-line px-5 py-4 lg:block">
           <p className="truncate text-sm font-semibold">{ctx.user.name ?? ctx.user.email}</p>
           <p className="text-xs text-muted">{ctx.roles.map((r) => ROLE_LABEL[r] ?? r).join(", ")}</p>
@@ -36,7 +36,7 @@ export default async function AdminLayout({ children, params }: LayoutProps<"/t/
           </form>
         </div>
       </aside>
-      <div className="min-w-0 px-4 py-6 sm:px-8 lg:py-8">{children}</div>
+      <div className="min-w-0 px-4 py-6 sm:px-8 lg:py-8 print:p-0">{children}</div>
     </div>
   );
 }

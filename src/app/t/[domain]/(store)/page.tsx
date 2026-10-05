@@ -38,6 +38,33 @@ export default async function StoreHome({ params }: PageProps<"/t/[domain]">) {
         </div>
       </section>
 
+      {/* Promociones del momento: cada banner sale solo entre sus fechas */}
+      {home.banners.some((b) => b.imageUrl) ? (
+        <section aria-label="Promociones" className="mx-auto max-w-7xl pt-6 md:px-4">
+          <div className="no-scrollbar flex snap-x snap-mandatory gap-4 overflow-x-auto px-4 md:px-0">
+            {home.banners
+              .filter((b) => b.imageUrl)
+              .map((b, i, list) => {
+                const image = (
+                  // eslint-disable-next-line @next/next/no-img-element -- banner del negocio
+                  <img src={b.imageUrl} alt={b.title} loading={i === 0 ? "eager" : "lazy"} className="aspect-[16/7] size-full object-cover sm:aspect-[16/5]" />
+                );
+                return (
+                  <div key={b.id} className={`shrink-0 snap-center overflow-hidden rounded-3xl bg-store-soft ${list.length > 1 ? "w-[88%] md:w-[80%]" : "w-full"}`}>
+                    {b.linkUrl ? (
+                      <Link href={b.linkUrl} className="block">
+                        {image}
+                      </Link>
+                    ) : (
+                      image
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </section>
+      ) : null}
+
       {/* Categorías en círculos */}
       <nav aria-label="Categorías" className="mx-auto max-w-7xl px-4 pt-10">
         <ul className="no-scrollbar flex gap-5 overflow-x-auto pb-2 sm:justify-center">

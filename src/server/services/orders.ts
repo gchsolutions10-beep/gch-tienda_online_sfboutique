@@ -3,7 +3,7 @@ import type { Currency, OrderStatus, PaymentMethod } from "@/generated/prisma/en
 import { db, tenantDb, type TenantDb } from "@/server/db";
 import { getCurrentRates } from "@/server/queries/store";
 import { centsToDecimalString, toCents } from "@/lib/money";
-import { rateToBp } from "@/lib/tax-ve";
+import { rateToBp, splitIgtf } from "@/lib/tax-ve";
 import { paymentAmounts } from "@/lib/payments";
 import { favoriteMethod } from "@/lib/crm";
 import { isFullyPaid, nextStatus, priceOrder, shippingFor, UNPAID_STATUSES, type Fulfillment } from "@/lib/orders";
@@ -28,6 +28,8 @@ export async function getDeliverySettings(tenantId: string) {
     nationalShippingCents: s?.nationalShippingUsd ? toCents(s.nationalShippingUsd) : null,
     freeShippingFromCents: s?.freeShippingFromUsd ? toCents(s.freeShippingFromUsd) : null,
     reservationHours: s?.reservationHours ?? 24,
+    /** IGTF sobre pagos en divisas (0 = el negocio no lo cobra) */
+    igtfRateBp: s?.igtfEnabled ? rateToBp(s.igtfRate) : 0,
     tax: {
       ivaEnabled: s?.ivaEnabled ?? true,
       ivaRateBp: rateToBp(s?.ivaRate ?? 0.16),
@@ -317,6 +319,21 @@ async function rateForPayment(tenantId: string) {
   return { bcv: rates.bcv.rate, p2p: rates.p2p?.rate ?? null };
 }
 
+/**
+ * IGTF de un pago nuevo: si es en divisas y el negocio lo cobra, la parte que
+ * cubre lo que falta del pedido paga el IGTF (el pago lo trae incluido).
+ */
+async function igtfForPayment(tx: Tx, orderId: string, currency: Currency, amountCents: number, igtfRateBp: number) {
+  if (currency === "VES" || igtfRateBp <= 0) return { igtf: 0, base: 0 };
+  const order = await tx.order.findFirstOrThrow({
+    where: { id: orderId },
+    select: { totalUsd: true, payments: { where: { status: { in: ["CONFIRMED", "PENDING_REVIEW"] } }, select: { amountUsd: true, igtfAmount: true, currency: true } } },
+  });
+  const credited = order.payments.reduce((a, p) => a + toCents(p.amountUsd) - (p.currency === "VES" ? 0 : toCents(p.igtfAmount)), 0);
+  const split = splitIgtf(amountCents, toCents(order.totalUsd) - credited, igtfRateBp);
+  return { igtf: split.igtf, base: split.covered };
+}
+
 async function checkAccount(tx: Tx, accountId: string | null, currency: Currency) {
   if (!accountId) return;
   const account = await tx.financialAccount.findFirst({ where: { id: accountId, isActive: true }, select: { currency: true } });
@@ -327,13 +344,14 @@ async function checkAccount(tx: Tx, accountId: string | null, currency: Currency
 /** La clienta reporta su pago (queda por verificar). Devuelve el id para adjuntar el comprobante. */
 export async function reportPayment(tenantId: string, trackingToken: string, p: PaymentInput) {
   const tdb = tenantDb(tenantId);
-  const rates = await rateForPayment(tenantId);
+  const [rates, settings] = await Promise.all([rateForPayment(tenantId), getDeliverySettings(tenantId)]);
   const amounts = paymentAmounts(p.currency, p.amountCents, rates);
   return tdb.$transaction(async (tx) => {
     const order = await tx.order.findFirst({ where: { trackingToken }, select: { id: true, status: true } });
     if (!order) throw new OrderError("Pedido no encontrado.");
     if (!UNPAID_STATUSES.includes(order.status)) throw new OrderError("Este pedido ya no espera pagos.");
     await checkAccount(tx, p.financialAccountId, p.currency);
+    const igtf = await igtfForPayment(tx, order.id, p.currency, p.amountCents, settings.igtfRateBp);
     const payment = await tx.payment.create({
       data: {
         tenantId,
@@ -346,6 +364,8 @@ export async function reportPayment(tenantId: string, trackingToken: string, p: 
         rateSource: amounts.rateSource,
         amountUsd: money(amounts.amountUsdCents),
         amountVes: money(amounts.amountVesCents),
+        igtfAmount: money(igtf.igtf),
+        igtfBase: money(igtf.base),
         financialAccountId: p.financialAccountId,
         reference: p.reference,
         payerName: p.payerName,
@@ -380,9 +400,18 @@ export async function saveProof(tenantId: string, paymentId: string, data: Uint8
 async function settle(tx: Tx, tenantId: string, orderId: string, actor: Actor) {
   const order = await tx.order.findFirstOrThrow({
     where: { id: orderId },
-    select: { status: true, totalUsd: true, customerId: true, payments: { where: { status: "CONFIRMED" }, select: { amountUsd: true } } },
+    select: {
+      status: true,
+      totalUsd: true,
+      customerId: true,
+      payments: { where: { status: "CONFIRMED" }, select: { amountUsd: true, currency: true, igtfAmount: true, igtfBase: true } },
+    },
   });
-  const paid = order.payments.reduce((a, p) => a + toCents(p.amountUsd), 0);
+  // Lo que abona cada pago es su equivalente en USD menos el IGTF que trae incluido (divisas: 1 a 1).
+  const igtfOf = (p: { currency: Currency; igtfAmount: Prisma.Decimal }) => (p.currency === "VES" ? 0 : toCents(p.igtfAmount));
+  const paid = order.payments.reduce((a, p) => a + toCents(p.amountUsd) - igtfOf(p), 0);
+  const igtfUsd = order.payments.reduce((a, p) => a + igtfOf(p), 0);
+  const igtfBaseUsd = order.payments.reduce((a, p) => a + (p.currency === "VES" ? 0 : toCents(p.igtfBase)), 0);
   const total = toCents(order.totalUsd);
   const full = isFullyPaid(total, paid);
   const wasUnpaid = UNPAID_STATUSES.includes(order.status);
@@ -394,6 +423,8 @@ async function settle(tx: Tx, tenantId: string, orderId: string, actor: Actor) {
     where: { id: orderId },
     data: {
       paidUsd: money(paid),
+      igtfUsd: money(igtfUsd),
+      igtfBaseUsd: money(igtfBaseUsd),
       paymentStatus: paid <= 0 ? "UNPAID" : full ? "PAID" : "PARTIAL",
       status,
       ...(wasUnpaid && full ? { paidAt: new Date(), reservedUntil: null } : {}),
@@ -446,13 +477,14 @@ export async function reviewPayment(tenantId: string, paymentId: string, approve
 /** El personal registra un pago recibido directamente (WhatsApp, tienda): queda confirmado. */
 export async function registerPayment(tenantId: string, orderId: string, p: PaymentInput, actor: Actor) {
   const tdb = tenantDb(tenantId);
-  const rates = await rateForPayment(tenantId);
+  const [rates, settings] = await Promise.all([rateForPayment(tenantId), getDeliverySettings(tenantId)]);
   const amounts = paymentAmounts(p.currency, p.amountCents, rates);
   return tdb.$transaction(async (tx) => {
     const order = await tx.order.findFirst({ where: { id: orderId }, select: { status: true } });
     if (!order) throw new OrderError("Pedido no encontrado.");
     if (order.status === "CANCELLED") throw new OrderError("El pedido está anulado.");
     await checkAccount(tx, p.financialAccountId, p.currency);
+    const igtf = await igtfForPayment(tx, orderId, p.currency, p.amountCents, settings.igtfRateBp);
     await tx.payment.create({
       data: {
         tenantId,
@@ -465,6 +497,8 @@ export async function registerPayment(tenantId: string, orderId: string, p: Paym
         rateSource: amounts.rateSource,
         amountUsd: money(amounts.amountUsdCents),
         amountVes: money(amounts.amountVesCents),
+        igtfAmount: money(igtf.igtf),
+        igtfBase: money(igtf.base),
         financialAccountId: p.financialAccountId,
         reference: p.reference,
         payerName: p.payerName,

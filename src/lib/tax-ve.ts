@@ -67,3 +67,24 @@ export function igtfApplies(currency: "VES" | "USD" | "USDT", igtfEnabled: boole
 export function igtfFor(amountCents: number, currency: "VES" | "USD" | "USDT", igtfEnabled: boolean, igtfRateBp: number): number {
   return igtfApplies(currency, igtfEnabled) ? Math.round((amountCents * igtfRateBp) / 10_000) : 0;
 }
+
+/** Lo que hay que cobrar en divisas para cubrir un monto neto: neto + IGTF. */
+export function withIgtf(netCents: number, igtfRateBp: number): number {
+  return netCents + Math.round((Math.max(0, netCents) * igtfRateBp) / 10_000);
+}
+
+/**
+ * Reparte un pago en divisas (USD/USDT, en centavos de USD) entre:
+ * - covered: la parte que paga el pedido (base del IGTF),
+ * - igtf: el impuesto sobre esa parte,
+ * - excess: lo que sobra (vuelto o saldo a favor), que no paga IGTF.
+ * `remainingNetCents` es lo que falta del pedido antes de este pago.
+ * Con la tasa en 0 (IGTF apagado) todo el pago cubre el pedido.
+ */
+export function splitIgtf(divisaCents: number, remainingNetCents: number, igtfRateBp: number) {
+  const remaining = Math.max(0, remainingNetCents);
+  const maxCover = igtfRateBp > 0 ? Math.round((divisaCents * 10_000) / (10_000 + igtfRateBp)) : divisaCents;
+  if (maxCover <= remaining) return { covered: maxCover, igtf: divisaCents - maxCover, excess: 0 };
+  const igtf = Math.round((remaining * igtfRateBp) / 10_000);
+  return { covered: remaining, igtf, excess: divisaCents - remaining - igtf };
+}

@@ -76,7 +76,7 @@ export default async function CashPage({ params, searchParams }: PageProps<"/t/[
           para poder vender.
         </p>
       ) : (
-        <StoreSale sessionId={session.id} bcvRate={rates.bcv.rate} accounts={setup.accounts} methods={setup.methods} tax={settings.tax} />
+        <StoreSale sessionId={session.id} bcvRate={rates.bcv.rate} accounts={setup.accounts} methods={setup.methods} tax={settings.tax} igtfRateBp={settings.igtfRateBp} />
       )}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">

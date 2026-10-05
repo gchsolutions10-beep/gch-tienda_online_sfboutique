@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { getTenant } from "@/server/tenant";
 import { tenantDb } from "@/server/db";
 import { getCurrentRates } from "@/server/queries/store";
-import { releaseExpiredReservations } from "@/server/services/orders";
+import { getDeliverySettings, releaseExpiredReservations } from "@/server/services/orders";
 import { PaymentReport, type CheckoutAccount } from "@/components/store/payment-report";
 import { formatMoney, formatUsd, formatVes, toCents, usdToVesCents } from "@/lib/money";
 import { customerSteps, FULFILLMENT, ORDER_STATUS, timeLeft, UNPAID_STATUSES } from "@/lib/orders";
@@ -24,23 +24,26 @@ export default async function OrderTrackingPage({ params }: PageProps<"/t/[domai
     where: { trackingToken: token },
     include: {
       items: { include: { product: { select: { slug: true, images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } } } } } },
-      payments: { orderBy: { createdAt: "asc" }, select: { id: true, method: true, currency: true, amount: true, amountUsd: true, status: true, reference: true, createdAt: true } },
+      payments: { orderBy: { createdAt: "asc" }, select: { id: true, method: true, currency: true, amount: true, amountUsd: true, igtfAmount: true, status: true, reference: true, createdAt: true } },
     },
   });
   if (!order) notFound();
 
-  const [rates, accounts] = await Promise.all([
+  const [rates, accounts, settings] = await Promise.all([
     getCurrentRates(tenant.id),
     tdb.financialAccount.findMany({
       where: { isActive: true, showInCheckout: true },
       orderBy: { sortOrder: "asc" },
       select: { id: true, name: true, type: true, currency: true, bankName: true, bankCode: true, accountNumber: true, holderName: true, holderIdType: true, holderIdNumber: true, phone: true, email: true, walletId: true },
     }),
+    getDeliverySettings(tenant.id),
   ]);
 
   const totalCents = toCents(order.totalUsd);
-  const confirmed = order.payments.filter((p) => p.status === "CONFIRMED").reduce((a, p) => a + toCents(p.amountUsd), 0);
-  const inReview = order.payments.filter((p) => p.status === "PENDING_REVIEW").reduce((a, p) => a + toCents(p.amountUsd), 0);
+  // Lo que abona cada pago: su equivalente en USD sin el IGTF que trae incluido.
+  const credit = (p: (typeof order.payments)[number]) => toCents(p.amountUsd) - (p.currency === "VES" ? 0 : toCents(p.igtfAmount));
+  const confirmed = order.payments.filter((p) => p.status === "CONFIRMED").reduce((a, p) => a + credit(p), 0);
+  const inReview = order.payments.filter((p) => p.status === "PENDING_REVIEW").reduce((a, p) => a + credit(p), 0);
   const remaining = Math.max(0, totalCents - confirmed - inReview);
   const unpaid = UNPAID_STATUSES.includes(order.status);
   const bcv = rates.bcv?.rate ?? Number(order.bcvRate);
@@ -105,7 +108,7 @@ export default async function OrderTrackingPage({ params }: PageProps<"/t/[domai
               ) : null}
               {remaining > 0 ? (
                 methods.length ? (
-                  <PaymentReport token={order.trackingToken} methods={methods} remainingUsdCents={remaining} bcvRate={bcv} />
+                  <PaymentReport token={order.trackingToken} methods={methods} remainingUsdCents={remaining} bcvRate={bcv} igtfRateBp={settings.igtfRateBp} />
                 ) : (
                   <p className="mt-3 text-sm text-store-muted">Escríbenos por WhatsApp para recibir los datos de pago.</p>
                 )
@@ -183,6 +186,9 @@ export default async function OrderTrackingPage({ params }: PageProps<"/t/[domai
             </div>
             {toCents(order.ivaUsd) > 0 ? (
               <div className="flex justify-between text-store-muted"><dt>IVA{toCents(order.totalUsd) === toCents(order.subtotalUsd) + toCents(order.shippingUsd) ? " incluido" : ""}</dt><dd>{formatUsd(toCents(order.ivaUsd))}</dd></div>
+            ) : null}
+            {toCents(order.igtfUsd) > 0 ? (
+              <div className="flex justify-between text-store-muted"><dt>+ IGTF por pago en divisas</dt><dd>{formatUsd(toCents(order.igtfUsd))}</dd></div>
             ) : null}
             <div className="flex items-baseline justify-between border-t border-store-line pt-2">
               <dt className="font-semibold">Total</dt>
