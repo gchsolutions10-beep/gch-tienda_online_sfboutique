@@ -128,6 +128,7 @@ async function main() {
 
   // Limpia los datos de demo para poder volver a correr el seed
   await db.order.deleteMany({ where: { tenantId } });
+  await db.cashSession.deleteMany({ where: { tenantId } });
   await db.tenantAsset.deleteMany({ where: { tenantId, OR: [{ kind: { startsWith: "comprobante-" } }, { kind: { startsWith: "producto-" } }] } });
   await db.blogPost.deleteMany({ where: { tenantId } });
   await db.product.deleteMany({ where: { tenantId } });
@@ -263,7 +264,7 @@ async function main() {
       { tenantId, name: "Recurrente", color: "#7B2F9E", autoRule: "RECURRENT" },
       { tenantId, name: "Nuevo", color: "#2E7D5B", autoRule: "NEW" },
       { tenantId, name: "Inactivo", color: "#8A8A8A", autoRule: "INACTIVE" },
-      { tenantId, name: "Mayorista", color: "#C9A227" },
+      { tenantId, name: "Influencer", color: "#C9A227" },
     ],
   });
   await db.customer.createMany({

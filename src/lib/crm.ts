@@ -41,3 +41,17 @@ export function favoriteMethod<T extends string>(methods: T[]): T | null {
   for (const [m, n] of count) if (best === null || n > count.get(best)!) best = m;
   return best;
 }
+
+export const SOURCE_LABEL = { STORE: "Tienda física", WEB: "Tienda web", INSTAGRAM: "Instagram", WHATSAPP: "WhatsApp", REFERRAL: "Recomendación", OTHER: "Otro" } as const;
+
+export const INTERACTION = {
+  NOTE: { label: "Nota", icon: "📝" },
+  WHATSAPP: { label: "WhatsApp", icon: "💬" },
+  INSTAGRAM: { label: "Instagram", icon: "📸" },
+  CALL: { label: "Llamada", icon: "📞" },
+  VISIT: { label: "Visita a la tienda", icon: "🛍️" },
+  EMAIL: { label: "Correo", icon: "✉️" },
+} as const;
+
+/** Colores de los segmentos automáticos. */
+export const SEGMENT_COLOR: Record<AutoSegment, string> = { VIP: "#B0378F", RECURRENT: "#7B2F9E", NEW: "#2E7D5B", INACTIVE: "#8A8A8A" };

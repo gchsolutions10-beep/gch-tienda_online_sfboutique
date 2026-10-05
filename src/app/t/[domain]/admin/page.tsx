@@ -14,14 +14,26 @@ export default async function AdminHome({ params }: PageProps<"/t/[domain]/admin
   const tenant = await getTenant((await params).domain);
   await requireAdmin(tenant);
   const tdb = tenantDb(tenant.id);
-  const [rates, products, variants, customers, posts, orderCounts] = await Promise.all([
+  // Desde la medianoche de hoy en Caracas (UTC−4).
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
+  const startOfDay = new Date(`${today}T00:00:00-04:00`);
+  const [rates, products, variants, customers, posts, orderCounts, sales] = await Promise.all([
     getCurrentRates(tenant.id),
     tdb.product.count({ where: { isActive: true } }),
     tdb.productVariant.findMany({ where: { isActive: true, product: { isActive: true } }, select: { stock: true, reserved: true, priceUsdOverride: true, product: { select: { priceUsd: true, costUsd: true } } } }),
     tdb.customer.count(),
     tdb.blogPost.count({ where: { status: "PUBLISHED" } }),
     tdb.order.groupBy({ by: ["status"], where: { status: { in: ["PAYMENT_REVIEW", "PENDING", "PAID", "PREPARING"] } }, _count: { _all: true } }),
+    tdb.order.groupBy({
+      by: ["channel"],
+      where: { paidAt: { gte: startOfDay }, status: { not: "CANCELLED" } },
+      _sum: { totalUsd: true, totalVes: true },
+      _count: { _all: true },
+    }),
   ]);
+  const salesUsd = sales.reduce((a, s) => a + toCents(s._sum.totalUsd ?? 0), 0);
+  const salesVes = sales.reduce((a, s) => a + toCents(s._sum.totalVes ?? 0), 0);
+  const salesBy = (channel: string) => sales.find((s) => s.channel === channel);
   const countOf = (...statuses: string[]) => orderCounts.filter((c) => statuses.includes(c.status)).reduce((a, c) => a + c._count._all, 0);
   const todo = [
     { n: countOf("PAYMENT_REVIEW"), label: "pagos por verificar", href: "/admin/pedidos?estado=verificar", urgent: true },
@@ -60,6 +72,29 @@ export default async function AdminHome({ params }: PageProps<"/t/[domain]/admin
           ))}
         </section>
       ) : null}
+
+      <section className={cn(card, "mb-6 flex flex-wrap items-end justify-between gap-4 p-5")}>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Ventas de hoy</p>
+          <p className="font-display text-4xl font-semibold">{formatUsd(salesUsd)}</p>
+          <p className="text-sm text-muted">{formatVes(salesVes)} en libros (tasa BCV de cada venta)</p>
+        </div>
+        <dl className="flex gap-6 text-sm">
+          {[
+            ["Tienda física", salesBy("STORE")],
+            ["Tienda web", salesBy("WEB")],
+          ].map(([label, s]) => {
+            const row = s as (typeof sales)[number] | undefined;
+            return (
+              <div key={label as string}>
+                <dt className="text-xs font-semibold text-muted">{label as string}</dt>
+                <dd className="font-bold">{formatUsd(toCents(row?._sum.totalUsd ?? 0))}</dd>
+                <dd className="text-xs text-muted">{row?._count._all ?? 0} ventas</dd>
+              </div>
+            );
+          })}
+        </dl>
+      </section>
 
       <section className="mb-6 grid gap-4 lg:grid-cols-2">
         {(["bcv", "p2p"] as const).map((k) => {

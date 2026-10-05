@@ -10,7 +10,7 @@ import { card, cn } from "@/components/ui/styles";
 import { formatMoney, formatRate, formatUsd, formatVes, toCents } from "@/lib/money";
 import { CARRIERS, FULFILLMENT, nextStatus, NEXT_ACTION, ORDER_STATUS, timeLeft } from "@/lib/orders";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/payments";
-import { formatVePhone, whatsappLink } from "@/lib/ve-ids";
+import { formatVeId, formatVePhone, whatsappLink } from "@/lib/ve-ids";
 
 export const metadata = { title: "Pedido" };
 
@@ -190,7 +190,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
           <section className={cn(card, "p-5 text-sm")}>
             <h2 className="text-lg font-bold">Clienta</h2>
             <p className="mt-2 font-semibold">{order.customerName}</p>
-            {order.customerIdNumber ? <p className="text-muted">{order.customerIdType}-{order.customerIdNumber}</p> : null}
+            {order.customerIdNumber ? <p className="text-muted">{formatVeId(order.customerIdType, order.customerIdNumber)}</p> : null}
             {order.customerPhone ? (
               <a href={whatsappLink(order.customerPhone, waText)} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block font-semibold text-ok underline">
                 WhatsApp {formatVePhone(order.customerPhone)}

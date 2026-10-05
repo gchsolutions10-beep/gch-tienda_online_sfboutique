@@ -1103,6 +1103,10 @@ model CashMovement {
   amount             Decimal          @db.Decimal(18, 2)
   financialAccountId String?
   reason             String
+  /// Quién lo registró
+  createdById        String?
+  /// Pedido relacionado (p. ej. el vuelto de una venta)
+  orderId            String?
   createdAt          DateTime         @default(now())
 
   session          CashSession       @relation(fields: [sessionId], references: [id], onDelete: Cascade)

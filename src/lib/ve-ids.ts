@@ -67,3 +67,9 @@ export function formatVePhone(e164: string): string {
 export function whatsappLink(e164: string, text?: string): string {
   return `https://wa.me/${e164.replace(/\D/g, "")}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 }
+
+/** "V", "12345678" → "V-12345678"; un RIF de 9 dígitos → "J-40123456-0". */
+export function formatVeId(type: string | null, number: string): string {
+  const t = type ?? "V";
+  return number.length === 9 ? `${t}-${number.slice(0, 8)}-${number[8]}` : `${t}-${number}`;
+}

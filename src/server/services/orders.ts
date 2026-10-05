@@ -98,7 +98,7 @@ async function returnStock(tx: Tx, tenantId: string, orderId: string, actor: Act
 }
 
 /** Recalcula las métricas del cliente con sus pedidos pagados y no anulados. */
-async function refreshCustomerStats(tx: Tx, customerId: string | null) {
+export async function refreshCustomerStats(tx: Tx, customerId: string | null) {
   if (!customerId) return;
   const orders = await tx.order.findMany({
     where: { customerId, paidAt: { not: null }, status: { not: "CANCELLED" } },
