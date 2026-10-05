@@ -27,7 +27,7 @@ export default async function AdminLayout({ children, params }: LayoutProps<"/t/
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Administración</p>
           </div>
         </Link>
-        <AdminNav owner={isTenantAdmin(ctx)} content={isTenantAdmin(ctx) || ctx.roles.includes("EDITOR")} />
+        <AdminNav owner={isTenantAdmin(ctx)} content={isTenantAdmin(ctx) || ctx.roles.includes("EDITOR")} manager={isTenantAdmin(ctx) || ctx.roles.includes("BRANCH_ADMIN")} />
         <div className="hidden shrink-0 border-t border-line px-5 py-4 lg:block">
           <p className="truncate text-sm font-semibold">{ctx.user.name ?? ctx.user.email}</p>
           <p className="text-xs text-muted">{ctx.roles.map((r) => ROLE_LABEL[r] ?? r).join(", ")}</p>

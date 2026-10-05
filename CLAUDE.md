@@ -12,11 +12,12 @@ Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSo
   commit en una rama `fase-N-…`, unir a `main` cuando lo pida, y explicar qué se hizo y qué falta.
 
 ## Estado (5 de octubre de 2026)
-- Fases 1–4 listas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago, pedidos,
+- Fases 1–5 listas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago, pedidos,
   productos/stock, envíos, cuentas de cobro, caja multimoneda con cierre, CRM, **facturación venezolana con IGTF**
-  (facturas, notas de crédito/débito, número de control, libro de ventas) y **editor del blog, portada y banners**.
-  Detalle en `docs/ARQUITECTURA.md` (sección 5c para la fase 4).
-- **Siguiente: Fase 5** — reportes de gestión USD/Bs y dominio propio (cuando el usuario lo pida).
+  (facturas, notas de crédito/débito, número de control, libro de ventas), **editor del blog, portada y banners**, y
+  **reportes de gestión** (ventas, márgenes, BCV vs P2P, inventario) con **dominio propio**. Detalle en
+  `docs/ARQUITECTURA.md` (secciones 5c y 5d).
+- Siguiente: lo que pida el usuario tras mostrar la demo (p. ej. imprenta digital conectada, nota de entrega).
 - Lo legal/fiscal (IVA, IGTF, número de control) se marca siempre «validar con el contador»; el sistema no sustituye a la
   imprenta digital: guarda el número de control que ella asigna.
 

@@ -78,6 +78,9 @@ export default async function AdminHome({ params }: PageProps<"/t/[domain]/admin
           <p className="text-xs font-semibold uppercase tracking-widest text-muted">Ventas de hoy</p>
           <p className="font-display text-4xl font-semibold">{formatUsd(salesUsd)}</p>
           <p className="text-sm text-muted">{formatVes(salesVes)} en libros (tasa BCV de cada venta)</p>
+          <Link href="/admin/reportes?periodo=mes" className="mt-1 inline-block text-sm font-semibold text-brand-strong underline">
+            Ver reportes del mes →
+          </Link>
         </div>
         <dl className="flex gap-6 text-sm">
           {[

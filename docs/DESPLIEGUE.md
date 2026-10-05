@@ -122,12 +122,18 @@ para tu computadora.
 
 ---
 
-## 6. Más adelante: dominio propio
+## 6. Dominio propio
 
 Cuando la boutique tenga su dominio (por ejemplo `sfboutique.com`):
 
-1. En Vercel: **Settings → Domains → Add**, y crea en el proveedor del dominio el registro DNS que indique Vercel.
-2. Se registra el dominio para el negocio en la base de datos (tabla `tenant_domains`); te lo dejo hecho en su momento.
+1. En el panel: **Apariencia → Dominio propio**, escribe el dominio y toca **Registrar dominio** (queda con y sin `www`).
+2. En Vercel: proyecto → **Settings → Domains → Add**, y agrega `sfboutique.com` y `www.sfboutique.com`.
+3. En el proveedor del dominio (Namecheap, GoDaddy, NIC.ve…) crea los registros DNS que muestre Vercel
+   (normalmente un registro **A** para el dominio y un **CNAME** para el `www`).
+4. Espera de minutos a unas horas. Vercel activa el candado (https) solo. Las sesiones son por dominio:
+   la administradora tendrá que iniciar sesión otra vez en el dominio nuevo.
+
+La dirección `sfboutique.vercel.app` sigue funcionando.
 
 ---
 

@@ -120,6 +120,13 @@ El **IGTF** de los pagos en divisas se calcula desde la fase 4 (sección 5c).
 - **Portada** (`/admin/portada`): tarjetas verticales (máx. 4 activas) y banners con fechas desde/hasta (días completos en hora de Caracas). Los banners se muestran en el inicio de la tienda.
 - Roles: dueña y `EDITOR` (contenido). Enlaces solo internos (`/…`) o `https://`.
 
+## 5d. Reportes y dominio propio (fase 5)
+
+- **Reportes** (`/admin/reportes`, `src/lib/reports.ts`, `src/server/queries/reports.ts`): periodos en hora de Caracas (hoy, 7 y 30 días, este mes, mes pasado, rango), comparación con el periodo anterior, ventas por día, canal y método de pago (moneda original + USD), utilidad bruta sobre la venta sin IVA (con el **costo actual** del producto; las prendas sin costo se excluyen y se avisa), lo más vendido por producto, categoría, talla y color, clientas nuevas vs. recurrentes, IVA/IGTF/descuentos, e inventario (valor a costo y a precio, prendas sin venta en 60 días).
+- **Valor real de lo cobrado en Bs**: cada pago en Bs se valora a la tasa BCV y a la P2P vigentes en su fecha (historial de `ExchangeRate`); la diferencia es la pérdida o ganancia cambiaria.
+- Ventas = pedidos con `paidAt` en el periodo y no anulados. Exportación CSV por prenda (`/admin/reportes/exportar`); costo y utilidad solo para la dueña. La encargada ve ventas sin costos.
+- **Dominio propio** (Apariencia): registra el dominio con y sin www en `TenantDomain` (`parseCustomDomain`, `domainPair`); luego se agrega en Vercel y en el DNS (ver `docs/DESPLIEGUE.md`).
+
 ## 6. Propuesta de componentes de interfaz
 
 | Componente | Estado | Qué hace |
@@ -156,4 +163,4 @@ El **IGTF** de los pagos en divisas se calcula desde la fase 4 (sección 5c).
 | 2 | Panel de productos y stock por variante + checkout web con reporte de pago y reserva de stock + pedidos + envíos | ✅ |
 | 3 | CRM de clientes + cuentas de cobro editables + caja multimoneda con cierre por moneda | ✅ |
 | 4 | Facturación venezolana (series, número de control, notas, libro de ventas, IGTF) + CMS del blog y banners | ✅ |
-| 5 | Reportes de gestión USD/Bs (ventas, márgenes, P2P vs BCV) y dominio propio | Siguiente |
+| 5 | Reportes de gestión USD/Bs (ventas, márgenes, P2P vs BCV) y dominio propio | ✅ |

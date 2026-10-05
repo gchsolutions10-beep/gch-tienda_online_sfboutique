@@ -69,3 +69,27 @@ export function publicOrigin(domain: string | null, slug: string) {
   if (!host) return "";
   return `${/localhost|\.test(:|$)/.test(host) ? "http" : "https"}://${host}`;
 }
+
+/**
+ * Valida un dominio propio escrito por la dueña ("https://www.SFBoutique.com/"
+ * → "www.sfboutique.com"). Rechaza localhost, IPs y los dominios de la plataforma.
+ */
+export function parseCustomDomain(input: string, rootDomain = ""): string | null {
+  const host = input
+    .trim()
+    .toLowerCase()
+    .replace(/^[a-z]+:\/\//, "")
+    .replace(/[/?#].*$/, "")
+    .replace(/:\d+$/, "")
+    .replace(/\.$/, "");
+  if (host.length > 253 || !/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$/.test(host)) return null;
+  const root = normalizeHost(rootDomain);
+  if (host.endsWith(".vercel.app") || host === "localhost" || host.endsWith(".localhost")) return null;
+  if (root && (host === root || host.endsWith(`.${root}`))) return null;
+  return host;
+}
+
+/** El dominio y su pareja con/sin www (los dos deben llevar a la tienda). */
+export function domainPair(host: string): string[] {
+  return host.startsWith("www.") ? [host.slice(4), host] : [host, `www.${host}`];
+}
