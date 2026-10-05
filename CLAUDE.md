@@ -1,1 +1,51 @@
 @AGENTS.md
+
+# GCH Moda — notas para trabajar en este repositorio
+
+Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSolutions). Primer negocio: **SF Boutique**
+(Acarigua, @sf_boutiqueve). En línea: https://sfboutique.vercel.app (Vercel, rama `main`) con base de datos en Neon.
+
+## Con quién trabajas
+- El usuario (Gustavo, GchSolutions) **habla en español**: responde siempre en español, claro y sin tecnicismos
+  innecesarios (explica rama, merge, migración, etc. cuando aparezcan). No es programador de formación.
+- Trabaja **por fases**; dentro de una fase puedes avanzar solo. Al terminar: pruebas, tipos, lint y build en verde,
+  commit en una rama `fase-N-…`, unir a `main` cuando lo pida, y explicar qué se hizo y qué falta.
+
+## Estado (5 de octubre de 2026)
+- Fases 1–3 listas y publicadas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago,
+  pedidos, productos/stock, envíos, cuentas de cobro, caja multimoneda con cierre, CRM. Detalle en `docs/ARQUITECTURA.md`.
+- **Siguiente: Fase 4** — facturación venezolana (series, número de control de imprenta digital autorizada, notas de
+  crédito, libro de ventas en Bs, IGTF 3 % en pagos en divisas) + editor del blog y banners/portada.
+- Lo legal/fiscal (IVA, IGTF, número de control) se marca siempre «validar con el contador»; el sistema no sustituye a la
+  imprenta digital: guarda el número de control que ella asigna.
+
+## Reglas del código
+- Next.js 16 (ver AGENTS.md: `proxy.ts`, params asíncronos, `PageProps`/`RouteContext` vía `npx next typegen`), React 19,
+  Tailwind 4, Prisma 7 con `@prisma/adapter-pg`, Zod, Vitest.
+- Multi-negocio: todo pasa por `tenantDb(tenantId)` (`src/server/db.ts`). El cliente `db` se crea en la primera consulta
+  (así compila sin `DATABASE_URL`).
+- Dinero en **centavos enteros**; precios del catálogo en USD; el bolívar es la moneda de cuenta (tasa BCV guardada por
+  pedido y pago); P2P solo para gestión. Lógica pura y probada en `src/lib`, datos en `src/server`.
+- Constantes que usan páginas de servidor no van en archivos `"use client"` (ponlas en `src/lib`).
+- En componentes de servidor no uses `Date.now()` (regla react-hooks/purity): usa `new Date().getTime()`.
+
+## Base de datos y publicación
+- **Nunca te conectes a Neon ni pidas sus cadenas de conexión.** El usuario corre: `npm run migrar:neon` (aplica
+  migraciones), `npm run admin:neon` (clave/administradora), `npm run demo:neon` (recarga la demo: BORRA datos; solo para
+  demos). Guía: `docs/DESPLIEGUE.md`.
+- **Si una fase trae migración nueva:** une a `main` en local, pide al usuario correr `npm run migrar:neon`, y solo
+  después haz `git push` (si no, la página en línea da error).
+- Vercel: variables `DATABASE_URL` (Neon pooled), `ROOT_DOMAIN=sfboutique.vercel.app`, `DEFAULT_TENANT_SLUG=sfboutique`.
+  `vercel.json` fuerza el framework Next.js (Vercel lo había detectado como estático).
+- Local (en la computadora del usuario, Windows): `npm run db:local` (prisma dev en puertos fijos 51217–51219; si dice
+  «puerto ocupado» es que ya está encendida) y `npm run dev -- --port 3001` → `http://sfboutique.localhost:3001`.
+  Sabrosito (otro proyecto) usa los puertos 51213–51216.
+- En una sesión en la nube no hay base local: verifica con `npm test`, `npm run typecheck`, `npm run lint` y
+  `npm run build`, y en la vista previa de Vercel de la rama.
+
+## Detalles que ya costaron tiempo
+- Al agregar rutas nuevas con el servidor de desarrollo corriendo pueden dar 404: borra `.next/dev` y reinicia.
+- En Windows el repo usa `core.autocrlf=true`: los archivos tienen CRLF; reemplazos de varias líneas con scripts fallan
+  en silencio (usa la herramienta de edición).
+- Formularios con `action={fn}` se vacían tras un error: usa `onSubmit` + `preventDefault` y `method="post"`.
+- Cédula/RIF: `parseVeId` / `formatVeId`; teléfonos `normalizeVePhone` (+58).
