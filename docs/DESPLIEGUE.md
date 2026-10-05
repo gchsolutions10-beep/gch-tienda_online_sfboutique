@@ -18,12 +18,12 @@ Tu computadora ──(git push)──▶ GitHub ──(publica solo)──▶ Ve
 
 ## 1. Subir el código a GitHub
 
-1. En [github.com/new](https://github.com/new) crea un repositorio **privado** llamado `gch-moda`.
+1. En [github.com/new](https://github.com/new) crea un repositorio **privado** llamado `gch-tienda_online_sfboutique`.
    No marques «Add a README», «.gitignore» ni licencia: el proyecto ya los tiene.
 2. En la terminal, dentro de la carpeta del proyecto:
 
 ```bash
-git remote add origin https://github.com/gchsolutions10-beep/gch-moda.git
+git remote add origin https://github.com/gchsolutions10-beep/gch-tienda_online_sfboutique.git
 ```
 
 ```bash
@@ -37,7 +37,7 @@ La primera vez Windows te pide entrar con tu cuenta de GitHub en el navegador.
 ## 2. Base de datos en Neon
 
 1. Entra a [console.neon.tech](https://console.neon.tech) → **New project**:
-   - **Name:** `gch-moda`
+   - **Name:** `gch-tienda_online_sfboutique`
    - **Postgres version:** la más reciente
    - **Region:** **AWS US East (N. Virginia)**: la más cercana a Venezuela y la misma de Vercel.
 2. En el panel del proyecto pulsa **Connect**. Hay dos cadenas de conexión (las dos empiezan con `postgresql://`):
@@ -74,7 +74,7 @@ npm run admin:neon
 
 ## 3. Publicar en Vercel
 
-1. Entra a [vercel.com/new](https://vercel.com/new) con tu cuenta de GitHub e **importa** `gch-moda`.
+1. Entra a [vercel.com/new](https://vercel.com/new) con tu cuenta de GitHub e **importa** `gch-tienda_online_sfboutique`.
 2. Vercel detecta Next.js solo. No cambies *Build Command* ni *Output* (el proyecto ya trae `prisma generate && next build`).
 3. Antes de pulsar **Deploy**, abre **Environment Variables** y agrega (para *Production* y *Preview*):
 
