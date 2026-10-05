@@ -11,6 +11,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { db } from "../src/server/db";
 import { hashPassword } from "../src/server/auth/password";
+import { adminPasswordProblem } from "./admin-utils";
 import { demoSvg, type Garment } from "./demo-images";
 
 const SLUG = process.env.DEFAULT_TENANT_SLUG || "sfboutique";
@@ -90,6 +91,8 @@ async function main() {
   const email = process.env.SEED_ADMIN_EMAIL?.toLowerCase();
   const password = process.env.SEED_ADMIN_PASSWORD;
   if (!email || !password) throw new Error("Define SEED_ADMIN_EMAIL y SEED_ADMIN_PASSWORD en .env");
+  const problem = adminPasswordProblem(password);
+  if (problem) throw new Error(problem);
 
   // Negocio
   const tenant = await db.tenant.upsert({
