@@ -86,3 +86,29 @@ export function vesValueAtP2p(vesCents: number, rates: Rates): number | null {
 export function remainingUsd(totalUsdCents: number, paidUsdCents: number[]): number {
   return Math.max(0, totalUsdCents - paidUsdCents.reduce((a, b) => a + b, 0));
 }
+
+/** Bancos de Venezuela más usados (código SUDEBAN) para Pago Móvil y transferencias. */
+export const VE_BANKS: [code: string, name: string][] = [
+  ["0102", "Banco de Venezuela"],
+  ["0104", "Venezolano de Crédito"],
+  ["0105", "Mercantil"],
+  ["0108", "Provincial"],
+  ["0114", "Bancaribe"],
+  ["0115", "Exterior"],
+  ["0128", "Caroní"],
+  ["0134", "Banesco"],
+  ["0137", "Sofitasa"],
+  ["0138", "Plaza"],
+  ["0151", "BFC"],
+  ["0156", "100% Banco"],
+  ["0163", "Banco del Tesoro"],
+  ["0166", "Banco Agrícola"],
+  ["0168", "Bancrecer"],
+  ["0169", "R4"],
+  ["0171", "Banco Activo"],
+  ["0172", "Bancamiga"],
+  ["0174", "Banplus"],
+  ["0175", "Banco Digital de los Trabajadores"],
+  ["0177", "Banfanb"],
+  ["0191", "BNC"],
+];

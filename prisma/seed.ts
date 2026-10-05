@@ -115,9 +115,20 @@ async function main() {
   });
   const tenantId = tenant.id;
   const branch = await db.branch.findFirstOrThrow({ where: { tenantId }, select: { id: true } });
+  await db.tenantSettings.update({
+    where: { tenantId },
+    data: {
+      pickupInfo: "SF Boutique, Acarigua (dirección por configurar). Lunes a sábado de 9:00 a 6:00.",
+      localDeliveryUsd: "3",
+      localDeliveryArea: "Acarigua y Araure",
+      nationalShippingUsd: null,
+      nextOrderNumber: 1001,
+    },
+  });
 
   // Limpia los datos de demo para poder volver a correr el seed
   await db.order.deleteMany({ where: { tenantId } });
+  await db.tenantAsset.deleteMany({ where: { tenantId, OR: [{ kind: { startsWith: "comprobante-" } }, { kind: { startsWith: "producto-" } }] } });
   await db.blogPost.deleteMany({ where: { tenantId } });
   await db.product.deleteMany({ where: { tenantId } });
   await db.category.deleteMany({ where: { tenantId } });
