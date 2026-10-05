@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/components/ui/styles";
 
 /** phase: módulo diseñado (tablas listas) que se construye en esa fase. */
-const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerOnly?: boolean; contentOnly?: boolean }[] = [
+const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerOnly?: boolean; contentOnly?: boolean; managerOnly?: boolean }[] = [
   { href: "/admin", label: "Resumen", icon: "📊" },
   { href: "/admin/tasas", label: "Tasas BCV / P2P", icon: "💱" },
   { href: "/admin/pedidos", label: "Pedidos", icon: "🧾" },
@@ -13,6 +13,7 @@ const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerO
   { href: "/admin/caja", label: "Caja (venta en tienda)", icon: "💵" },
   { href: "/admin/clientes", label: "Clientes (CRM)", icon: "👥" },
   { href: "/admin/facturacion", label: "Facturación", icon: "📑" },
+  { href: "/admin/reportes", label: "Reportes", icon: "📈", managerOnly: true },
   { href: "/admin/blog", label: "Blog y lookbook", icon: "📝", contentOnly: true },
   { href: "/admin/portada", label: "Portada y banners", icon: "🖼️", contentOnly: true },
   { href: "/admin/cuentas", label: "Cuentas de cobro", icon: "🏦", ownerOnly: true },
@@ -20,9 +21,9 @@ const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerO
   { href: "/admin/apariencia", label: "Apariencia", icon: "🎨", ownerOnly: true },
 ];
 
-export function AdminNav({ owner, content }: { owner: boolean; content: boolean }) {
+export function AdminNav({ owner, content, manager }: { owner: boolean; content: boolean; manager: boolean }) {
   const pathname = usePathname();
-  const items = ITEMS.filter((i) => (owner || !i.ownerOnly) && (content || !i.contentOnly));
+  const items = ITEMS.filter((i) => (owner || !i.ownerOnly) && (content || !i.contentOnly) && (manager || !i.managerOnly));
   const active = items.filter((i) => !i.phase && (pathname === i.href || pathname.startsWith(`${i.href}/`))).sort((a, b) => b.href.length - a.href.length)[0]?.href;
 
   return (
