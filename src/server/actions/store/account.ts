@@ -9,6 +9,7 @@ import { DUMMY_HASH, hashPassword, verifyPassword } from "@/server/auth/password
 import { createCustomerSession, destroyCustomerSession, getCurrentCustomer } from "@/server/auth/customer-session";
 import { clientIp, hit, resetLimit, tooManyMessage } from "@/server/services/rate-limit";
 import { getCreditSettings } from "@/server/services/credit";
+import { getModules } from "@/server/queries/modules";
 import { CONTRACT_VERSION, contractText } from "@/lib/credit-contract";
 import { centsToDecimalString } from "@/lib/money";
 import { formatVeId, normalizeVePhone, parseVeId } from "@/lib/ve-ids";
@@ -50,6 +51,8 @@ export async function registerAccount(raw: unknown): Promise<Result> {
   if (!whatsapp) return fail("Revisa el número de WhatsApp", "whatsapp");
 
   const tenant = await getTenantFromRequest();
+  const modules = await getModules(tenant.id);
+  if (!modules.credit && !modules.imports) return fail("Las cuentas no están disponibles por ahora.");
   const limit = await hit("checkout", `registro:${tenant.id}:${await clientIp()}`);
   if (!limit.ok) return fail(tooManyMessage(limit.retryAfterSec));
   const tdb = tenantDb(tenant.id);
@@ -145,6 +148,7 @@ const coord = (s: string, max: number) => {
  */
 export async function submitCreditApplication(formData: FormData): Promise<Result<{ guarantorUrl: string }>> {
   const tenant = await getTenantFromRequest();
+  if (!(await getModules(tenant.id)).credit) return fail("La compra a crédito no está disponible por ahora.");
   const me = await getCurrentCustomer(tenant.id);
   if (!me) return fail("Entra a tu cuenta para solicitar el crédito");
   const parsed = applicationInput.safeParse(Object.fromEntries([...formData.entries()].filter(([, v]) => typeof v === "string")));
@@ -245,6 +249,7 @@ export async function acceptAsGuarantor(raw: unknown): Promise<Result> {
   const parsed = guarantorInput.safeParse(raw);
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "Revisa los datos");
   const tenant = await getTenantFromRequest();
+  if (!(await getModules(tenant.id)).credit) return fail("La compra a crédito no está disponible por ahora.");
   const limit = await hit("orderLookup", `fiador:${tenant.id}:${await clientIp()}`);
   if (!limit.ok) return fail(tooManyMessage(limit.retryAfterSec));
   const id = parseVeId(parsed.data.idDoc);

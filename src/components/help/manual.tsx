@@ -10,6 +10,7 @@ export const MANUAL_SECTIONS = [
   { id: "duena", title: "Dueña o administradora", icon: "👑" },
   { id: "tienda", title: "Encargada y vendedoras", icon: "🛍️" },
   { id: "credito", title: "Credi-SF (compras a crédito)", icon: "🗓️" },
+  { id: "importaciones", title: "Importaciones y módulos", icon: "✈️" },
   { id: "contenido", title: "Blog, portada y banners", icon: "📝" },
   { id: "clienta", title: "Cómo compra la clienta", icon: "📱" },
   { id: "prueba", title: "Guion de prueba", icon: "✅" },
@@ -163,6 +164,63 @@ export function StoreManual() {
           moneda. El reporte se puede imprimir.
         </li>
       </Steps>
+    </>
+  );
+}
+
+export function ImportsManual() {
+  return (
+    <>
+      <p>
+        Servicio de <B>encargos por lote</B>: las clientas piden productos de SHEIN, Alibaba, AliExpress, Temu y otras tiendas; la tienda cotiza, cobra un{" "}
+        <B>adelanto</B> (50 % por defecto), compra todo junto al cerrar el lote y cobra el saldo cuando llega. Lo gestionan la dueña y la encargada.
+      </p>
+      <H3>1. Encender los módulos (dueña)</H3>
+      <Steps>
+        <li>
+          <Go href="/admin/modulos">Módulos</Go>: interruptores de <B>Importaciones</B> y <B>Venta a crédito</B>. Apagado, el módulo desaparece de los menús, del
+          pago y de «Mi cuenta», y sus enlaces muestran «Sección no disponible». Los datos no se borran.
+        </li>
+        <li>
+          <Go href="/admin/importaciones?vista=configuracion">Importaciones → Configuración</Go>: % de adelanto y % de comisión sugerida.
+        </li>
+      </Steps>
+      <H3>2. Lotes</H3>
+      <Steps>
+        <li>
+          <Go href="/admin/importaciones?vista=lotes">Importaciones → Lotes</Go>: «+ Nuevo lote» con fecha de apertura y de cierre (y llegada estimada). Queda en
+          borrador; toca <B>«Abrir»</B> para recibir pedidos.
+        </li>
+        <li>
+          Al cerrar, <B>«Cerrar y pasar a En proceso»</B>: los encargos con el adelanto pagado pasan solos a «Preparando» (comprado / en tránsito).
+        </li>
+        <li>
+          Cuando llega la mercancía, en cada pedido toca «Listo para retirar» (a la clienta le llega el aviso) y, con el saldo pagado, «Entregado». Al final marca el
+          lote <B>«Entregado»</B>: pasa al historial público y las clientas que recibieron pueden opinar.
+        </li>
+      </Steps>
+      <H3>3. Encargos: revisar y cotizar</H3>
+      <Steps>
+        <li>
+          <Go href="/admin/importaciones">Importaciones → Bandeja</Go>: abre el encargo; ves la foto (privada), el enlace, la talla, el color y la cantidad.
+        </li>
+        <li>
+          En <B>Cotización</B> escribe el costo por unidad y el flete: la comisión se sugiere sola (puedes cambiarla) y ves el total en dólares y bolívares y el
+          adelanto. Toca <B>«Aprobar y enviar cotización»</B>: a la clienta le llega el aviso.
+        </li>
+        <li>
+          Si no se puede traer (electrónicos, televisores, prohibidos…), escribe el motivo y <B>«Rechazar»</B>.
+        </li>
+        <li>
+          <B>«Publicar en la galería»</B> para que otras se sumen con «Unirme al pedido» (sale el contador «X usuarias han pedido…»). Si la clienta lo marcó como{" "}
+          <B>privado</B>, no se puede publicar.
+        </li>
+        <li>
+          Cuando la clienta acepta, se crea un <B>pedido normal</B>: el adelanto y el saldo se confirman en <Go href="/admin/pedidos">Pedidos</Go> como siempre, y
+          la factura también sale de ahí. Sin el saldo completo no deja marcarlo como entregado.
+        </li>
+      </Steps>
+      <Tip>En «Reseñas» apruebas las opiniones antes de que se vean en la tienda. Solo pueden opinar clientas que recibieron un encargo de ese lote.</Tip>
     </>
   );
 }

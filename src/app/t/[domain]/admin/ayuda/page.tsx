@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { getTenant } from "@/server/tenant";
 import { isTenantAdmin, requireAdmin } from "@/server/auth/guards";
 import { PageHeader } from "@/components/admin/page-header";
-import { ContentManual, CreditManual, CustomerManual, MANUAL_SECTIONS, OwnerManual, StoreManual, type ManualSectionId } from "@/components/help/manual";
+import { ContentManual, CreditManual, CustomerManual, ImportsManual, MANUAL_SECTIONS, OwnerManual, StoreManual, type ManualSectionId } from "@/components/help/manual";
 import { TestScript } from "@/components/help/test-script";
 import { card, cn } from "@/components/ui/styles";
 
@@ -12,6 +12,7 @@ const CONTENT: Record<ManualSectionId, () => ReactNode> = {
   duena: OwnerManual,
   tienda: StoreManual,
   credito: CreditManual,
+  importaciones: ImportsManual,
   contenido: ContentManual,
   clienta: CustomerManual,
   prueba: TestScript,
@@ -26,8 +27,8 @@ export default async function HelpPage({ params }: PageProps<"/t/[domain]/admin/
   const content = ctx.roles.includes("EDITOR");
 
   const visible: ManualSectionId[] = owner
-    ? ["duena", "tienda", "credito", "contenido", "clienta", "prueba"]
-    : [...(sells ? (["tienda"] as const) : []), ...(ctx.roles.includes("BRANCH_ADMIN") ? (["credito"] as const) : []), ...(content ? (["contenido"] as const) : []), "clienta"];
+    ? ["duena", "tienda", "credito", "importaciones", "contenido", "clienta", "prueba"]
+    : [...(sells ? (["tienda"] as const) : []), ...(ctx.roles.includes("BRANCH_ADMIN") ? (["credito", "importaciones"] as const) : []), ...(content ? (["contenido"] as const) : []), "clienta"];
   const sections = visible.map((id) => MANUAL_SECTIONS.find((s) => s.id === id)!);
 
   return (

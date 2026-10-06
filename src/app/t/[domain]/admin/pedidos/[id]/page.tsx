@@ -45,6 +45,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
           installments: { orderBy: { number: "asc" }, select: { number: true, dueDate: true, amountUsd: true, lateFeeUsd: true, paidUsd: true, paidAt: true } },
         },
       },
+      importRequest: { select: { id: true, sourceStore: true, sourceUrl: true, batch: { select: { name: true } } } },
       invoices: { orderBy: { issuedAt: "asc" }, select: { id: true, type: true, number: true, status: true, controlNumber: true, totalVes: true, series: { select: { series: true } } } },
     },
   });
@@ -132,6 +133,22 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
               ))}
             </ul>
           </section>
+
+          {order.isImport ? (
+            <section className={cn(card, "p-5 text-sm")}>
+              <h2 className="text-lg font-bold">🌎 Encargo de importación</h2>
+              <p className="mt-1">
+                Adelanto <b>{formatUsd(toCents(order.importDepositUsd ?? 0))}</b> para procesarlo · saldo {formatUsd(total - toCents(order.importDepositUsd ?? 0))} al llegar.
+                {order.importRequest?.batch ? <> Lote: <b>{order.importRequest.batch.name}</b>.</> : null}
+              </p>
+              <p className="mt-1 text-muted">Se entrega solo con el saldo pagado completo.</p>
+              {order.importRequest ? (
+                <Link href={`/admin/importaciones/${order.importRequest.id}`} className="mt-2 inline-block font-semibold text-brand-strong underline">
+                  Ver el encargo ({order.importRequest.sourceStore}) →
+                </Link>
+              ) : null}
+            </section>
+          ) : null}
 
           {plan ? (
             <section className={cn(card, "p-5")}>

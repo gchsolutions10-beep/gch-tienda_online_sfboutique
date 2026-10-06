@@ -109,7 +109,22 @@ export const TEST_SCRIPT: Group[] = [
     ],
   },
   {
-    title: "9. Reportes y clientas",
+    title: "9. Importaciones y módulos",
+    who: "Dueña + clienta (celular)",
+    tests: [
+      { id: "m1", text: "Módulos: apaga Importaciones y Venta a crédito. En la tienda desaparecen del menú y de «Mi cuenta»; /importaciones dice «no disponible». Vuelve a encenderlos." },
+      { id: "m2", text: "Importaciones → Lotes: crea un lote con fechas de hoy a 2 semanas y toca «Abrir»." },
+      { id: "m3", text: "En el celular: Importaciones → «Encargar con mi enlace». Pega un enlace de SHEIN, sube una foto, talla, color y acepta las condiciones." },
+      { id: "m4", text: "Panel → Importaciones → abre el encargo: escribe costo y flete, revisa la comisión sugerida y «Aprobar y enviar cotización»." },
+      { id: "m5", text: "«Publicar en la galería». En la tienda aparece con el contador; con otra cuenta toca «Unirme al pedido»." },
+      { id: "m6", text: "Haz un encargo marcado como «privado»: en el panel no deja publicarlo." },
+      { id: "m7", text: "En «Mi cuenta → Mis encargos» acepta la cotización: lleva a pagar el adelanto. Repórtalo y confírmalo en Pedidos: queda Pagado (parcial)." },
+      { id: "m8", text: "Lotes → «Cerrar y pasar a En proceso»: el pedido pasa a Preparando. Márcalo «Listo»: no deja entregarlo hasta pagar el saldo." },
+      { id: "m9", text: "Paga el saldo, entrega el pedido y marca el lote «Entregado». La clienta deja su reseña; apruébala en «Reseñas» y mírala en la tienda." },
+    ],
+  },
+  {
+    title: "10. Reportes y clientas",
     who: "Dueña",
     tests: [
       { id: "h1", text: "Reportes → «Últimos 7 días»: revisa ventas, utilidad y lo más vendido por talla y color." },
