@@ -207,6 +207,30 @@ enum InteractionType {
   EMAIL
 }
 
+/// Crédito de la clienta (Credi-SF)
+enum CreditStatus {
+  NONE
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum CreditApplicationStatus {
+  /// Esperando que el fiador acepte desde su enlace
+  WAITING_GUARANTOR
+  /// El fiador aceptó: la tienda revisa
+  IN_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum CreditPlanStatus {
+  ACTIVE
+  PAID
+  CANCELLED
+}
+
 enum PostStatus {
   DRAFT
   SCHEDULED
@@ -324,6 +348,21 @@ model TenantSettings {
 
   /// Próximo número visible de pedido (#1001). Se incrementa dentro de la transacción.
   nextOrderNumber Int @default(1001)
+
+  // ── Credi-SF ──
+  creditEnabled      Boolean @default(false)
+  /// Recargo fijo por mora (USD) y días de gracia tras el vencimiento
+  creditLateFeeUsd   Decimal @default(5) @db.Decimal(12, 2)
+  creditGraceDays    Int     @default(5)
+  /// Monto máximo financiado (sin la inicial) por nivel
+  creditMaxLevel1Usd Decimal @default(100) @db.Decimal(12, 2)
+  creditMaxLevel2Usd Decimal @default(250) @db.Decimal(12, 2)
+  creditMaxLevel3Usd Decimal @default(500) @db.Decimal(12, 2)
+  /// Créditos pagados sin mora para subir a Nivel 2 y a Nivel 3
+  creditUpgradeAfter Int     @default(3)
+  creditVipAfter     Int     @default(6)
+  /// Un solo crédito abierto a la vez
+  creditOneOpen      Boolean @default(true)
 
   // ── CRM: segmentación automática ──
   vipMinSpentUsd     Decimal @default(500) @db.Decimal(12, 2)
@@ -692,6 +731,19 @@ model Customer {
   /// Método de pago más usado (calculado)
   favoritePaymentMethod PaymentMethod?
 
+  // ── Cuenta en la tienda (solo para comprar a crédito) ──
+  passwordHash      String?
+  accountCreatedAt  DateTime?
+  /// La tienda confirmó el teléfono/WhatsApp (al revisar la solicitud)
+  phoneVerifiedAt   DateTime?
+  // ── Credi-SF ──
+  creditStatus      CreditStatus @default(NONE)
+  /// 1 Estándar · 2 Confiable · 3 VIP (ver src/lib/credit.ts)
+  creditLevel       Int          @default(1)
+  /// La gerencia fijó el nivel a mano (no sube solo; la mora igual lo baja)
+  creditLevelManual Boolean      @default(false)
+  creditLevelNote   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -700,6 +752,10 @@ model Customer {
   tags         CustomerTagOnCustomer[]
   interactions CustomerInteraction[]
   orders       Order[]
+  sessions     CustomerSession[]
+  creditApps   CreditApplication[]
+  creditPlans  CreditPlan[]
+  pushSubs     PushSubscription[]
 
   @@unique([tenantId, phone])
   @@index([tenantId, idNumber])
@@ -866,6 +922,8 @@ model Order {
   /// Hasta cuándo se aparta el stock si no paga
   reservedUntil   DateTime?
   termsAcceptedAt DateTime?
+  /// Compra a crédito (Credi-SF): ver CreditPlan
+  isCredit        Boolean   @default(false)
 
   paidAt       DateTime?
   shippedAt    DateTime?
@@ -885,6 +943,7 @@ model Order {
   invoices    Invoice[]
   movements   StockMovement[]
   events      OrderEvent[]
+  creditPlan  CreditPlan?
 
   @@unique([tenantId, number])
   @@index([tenantId, status, createdAt])
@@ -1243,4 +1302,148 @@ model BlogPostProduct {
 
   @@id([postId, productId])
   @@map("blog_post_products")
+}
+
+// ───────────────────────────── Credi-SF y cuentas de clientas ─────────────────────────────
+
+/// Sesión de una clienta con cuenta (cookie aparte de la del personal)
+model CustomerSession {
+  id         String   @id @default(cuid())
+  tenantId   String
+  customerId String
+  /// SHA-256 del token (nunca el token en claro)
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_sessions")
+}
+
+/// Expediente de crédito: datos de la compradora y del fiador, cédulas y aceptación del contrato
+model CreditApplication {
+  id         String                  @id @default(cuid())
+  tenantId   String
+  customerId String
+  status     CreditApplicationStatus @default(WAITING_GUARANTOR)
+
+  // Compradora (copia al momento de la solicitud)
+  fullName   String
+  idType     IdType
+  idNumber   String
+  phone      String
+  whatsapp   String?
+  email      String?
+  address    String
+  city       String?
+  state      String?
+  latitude   Decimal? @db.Decimal(9, 6)
+  longitude  Decimal? @db.Decimal(9, 6)
+  /// Foto de la cédula (TenantAsset privado)
+  idPhotoKey String?
+
+  // Fiador / codeudor solidario
+  guarantorName       String
+  guarantorIdType     IdType
+  guarantorIdNumber   String
+  guarantorPhone      String
+  guarantorPhotoKey   String?
+  /// Enlace privado para que el fiador acepte desde su teléfono
+  guarantorToken      String    @unique @default(cuid())
+  guarantorAcceptedAt DateTime?
+  guarantorIp         String?
+  guarantorUserAgent  String?
+
+  // Aceptación de la compradora
+  contractVersion String
+  /// SHA-256 del texto exacto aceptado
+  contractHash    String
+  acceptedAt      DateTime
+  acceptIp        String?
+  acceptUserAgent String?
+
+  reviewedByName String?
+  reviewedAt     DateTime?
+  reviewNote     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  customer Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  plans    CreditPlan[]
+
+  @@index([tenantId, status, createdAt])
+  @@index([customerId])
+  @@map("credit_applications")
+}
+
+/// Plan de pagos de una compra a crédito: inicial + cuotas quincenales
+model CreditPlan {
+  id                String           @id @default(cuid())
+  tenantId          String
+  orderId           String           @unique
+  customerId        String
+  applicationId     String?
+  /// Nivel con el que se calculó
+  level             Int
+  downPaymentUsd    Decimal          @db.Decimal(12, 2)
+  financedUsd       Decimal          @db.Decimal(12, 2)
+  installmentsCount Int
+  status            CreditPlanStatus @default(ACTIVE)
+  /// Hubo mora (se aplicó un recargo): congela el ascenso de nivel
+  wentLate          Boolean          @default(false)
+  paidAt            DateTime?
+  createdAt         DateTime         @default(now())
+
+  order        Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  customer     Customer            @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  application  CreditApplication?  @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+  installments CreditInstallment[]
+
+  @@index([tenantId, status])
+  @@index([customerId])
+  @@map("credit_plans")
+}
+
+model CreditInstallment {
+  id         String    @id @default(cuid())
+  planId     String
+  number     Int
+  /// Vence al final de ese día (hora de Caracas)
+  dueDate    DateTime
+  amountUsd  Decimal   @db.Decimal(12, 2)
+  lateFeeUsd Decimal   @default(0) @db.Decimal(12, 2)
+  lateFeeAt  DateTime?
+  paidUsd    Decimal   @default(0) @db.Decimal(12, 2)
+  paidAt     DateTime?
+
+  // Recordatorios enviados (para no repetir)
+  remindedBeforeAt DateTime?
+  remindedDueAt    DateTime?
+  remindedLateAt   DateTime?
+
+  plan CreditPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, number])
+  @@index([dueDate])
+  @@map("credit_installments")
+}
+
+/// Suscripción a notificaciones push (Web Push) de un teléfono o navegador
+model PushSubscription {
+  id            String    @id @default(cuid())
+  tenantId      String
+  customerId    String?
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?
+  lastSuccessAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, customerId])
+  @@map("push_subscriptions")
 }

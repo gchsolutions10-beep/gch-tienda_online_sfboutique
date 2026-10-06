@@ -17,12 +17,22 @@ const label = "mb-1 block text-xs font-semibold uppercase tracking-wider text-st
 
 const useHydrated = () => useSyncExternalStore(() => () => {}, () => true, () => false);
 
+export type CheckoutCredit = {
+  enabled: boolean;
+  /** Cuenta con sesión (null si no entró) */
+  account: { name: string; idDoc: string; phone: string; email: string | null; status: "NONE" | "PENDING" | "APPROVED" | "REJECTED" | "SUSPENDED" } | null;
+};
+
+const day = (iso: string) => new Date(iso).toLocaleDateString("es-VE", { weekday: "short", day: "numeric", month: "short", timeZone: "America/Caracas" });
+
 export function CheckoutForm({
   storeName,
   options,
   states,
   carriers,
+  credit,
 }: {
+  credit: CheckoutCredit;
   storeName: string;
   options: {
     pickup: { info: string | null } | null;
@@ -39,6 +49,8 @@ export function CheckoutForm({
     (f) => (f === "PICKUP" ? options.pickup : f === "LOCAL_DELIVERY" ? options.local : options.national) !== null,
   );
   const [fulfillment, setFulfillment] = useState<Fulfillment>(available[0] ?? "PICKUP");
+  const [payMode, setPayMode] = useState<"cash" | "credit">("cash");
+  const creditReady = payMode === "credit" && credit.account?.status === "APPROVED";
   const [quote, setQuote] = useState<Quote | null>(null);
   const [error, setError] = useState<{ message: string; field?: string } | null>(null);
   const [pending, startTransition] = useTransition();
@@ -53,11 +65,11 @@ export function CheckoutForm({
       const [variantId, q] = s.split(":");
       return { variantId, quantity: Number(q) };
     });
-    quoteCheckout({ lines, fulfillment }).then((q) => alive && setQuote(q));
+    quoteCheckout({ lines, fulfillment, credit: creditReady }).then((q) => alive && setQuote(q));
     return () => {
       alive = false;
     };
-  }, [linesKey, fulfillment]);
+  }, [linesKey, fulfillment, creditReady]);
 
   if (!hydrated) return <div className="mt-8 h-96 animate-pulse rounded-3xl bg-store-soft" />;
 
@@ -104,6 +116,8 @@ export function CheckoutForm({
         office: get("office"),
         notes: get("notes"),
         acceptTerms: form.get("terms") === "on",
+        payMode,
+        acceptCredit: form.get("acceptCredit") === "on",
       });
       if (result.ok) {
         bag.clear();
@@ -129,25 +143,73 @@ export function CheckoutForm({
   return (
     <form method="post" onSubmit={submit} className="mt-8 grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
       <div className="space-y-6">
+        {credit.enabled ? (
+          <section className="rounded-3xl bg-store-card p-5 shadow-sm sm:p-6">
+            <h2 className="font-display text-2xl font-semibold">¿Cómo quieres pagar?</h2>
+            <div role="radiogroup" aria-label="Forma de pago" className="mt-4 grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  ["cash", "💵 Pago de contado", "Pagas el total ahora (Pago Móvil, transferencia, Zelle, USDT)"],
+                  ["credit", "🗓️ Pagar a crédito (Credi-SF)", "Inicial hoy y cuotas quincenales"],
+                ] as const
+              ).map(([key, title, help]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={payMode === key}
+                  onClick={() => setPayMode(key)}
+                  className={cn("rounded-2xl border-2 p-4 text-left transition", payMode === key ? "border-brand bg-brand-soft" : "border-store-line hover:border-store-muted")}
+                >
+                  <span className="block font-semibold">{title}</span>
+                  <span className="block text-xs text-store-muted">{help}</span>
+                </button>
+              ))}
+            </div>
+            {payMode === "credit" && !credit.account ? (
+              <p className="mt-4 rounded-xl bg-store-soft p-3 text-sm">
+                Para comprar a crédito necesitas tu cuenta Credi-SF.{" "}
+                <Link href="/mi-cuenta?next=/checkout" className="font-semibold underline">Entrar o crear cuenta</Link>
+              </p>
+            ) : payMode === "credit" && credit.account?.status !== "APPROVED" ? (
+              <p className="mt-4 rounded-xl bg-store-soft p-3 text-sm">
+                {credit.account?.status === "PENDING"
+                  ? "Tu solicitud de crédito está en revisión. Te avisamos al aprobarla; mientras tanto puedes pagar de contado."
+                  : credit.account?.status === "SUSPENDED"
+                    ? "Tu crédito está suspendido. Escríbenos para revisarlo."
+                    : "Primero solicita tu crédito: llenas tus datos, los de tu fiador, y la tienda lo revisa."}{" "}
+                {credit.account?.status === "NONE" || credit.account?.status === "REJECTED" ? (
+                  <Link href="/credito/solicitud" className="font-semibold underline">Solicitar crédito</Link>
+                ) : null}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
+
         {/* Datos */}
         <section className="rounded-3xl bg-store-card p-5 shadow-sm sm:p-6">
           <h2 className="font-display text-2xl font-semibold">1. Tus datos</h2>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {creditReady && credit.account ? (
+            <p className="mt-3 rounded-xl bg-store-soft p-3 text-sm">
+              A crédito el pedido va a nombre de tu cuenta: <b>{credit.account.name}</b> · {credit.account.idDoc} · {credit.account.phone}
+            </p>
+          ) : null}
+          <div className={cn("mt-4 grid gap-4 sm:grid-cols-2", creditReady && "hidden")}>
             <div className="sm:col-span-2">
               <label htmlFor="name" className={label}>Nombre y apellido</label>
-              <input id="name" name="name" required autoComplete="name" className={field} />
+              <input id="name" name="name" required autoComplete="name" defaultValue={credit.account?.name} className={field} />
             </div>
             <div>
               <label htmlFor="idDoc" className={label}>Cédula o RIF</label>
-              <input id="idDoc" name="idDoc" required placeholder="V-12345678" className={field} />
+              <input id="idDoc" name="idDoc" required placeholder="V-12345678" defaultValue={credit.account?.idDoc} className={field} />
             </div>
             <div>
               <label htmlFor="phone" className={label}>WhatsApp</label>
-              <input id="phone" name="phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="0414-1234567" className={field} />
+              <input id="phone" name="phone" required type="tel" inputMode="tel" autoComplete="tel" placeholder="0414-1234567" defaultValue={credit.account?.phone} className={field} />
             </div>
             <div className="sm:col-span-2">
               <label htmlFor="email" className={label}>Correo (opcional)</label>
-              <input id="email" name="email" type="email" autoComplete="email" className={field} />
+              <input id="email" name="email" type="email" autoComplete="email" defaultValue={credit.account?.email ?? undefined} className={field} />
             </div>
           </div>
         </section>
@@ -295,6 +357,37 @@ export function CheckoutForm({
             </dd>
           </div>
         </dl>
+        {creditReady && quote?.credit ? (
+          <div className="mt-4 rounded-2xl border-2 border-brand p-3 text-sm">
+            <p className="font-semibold">Credi-SF · Nivel {quote.credit.level}</p>
+            {quote.credit.ok ? (
+              <ul className="mt-2 space-y-1">
+                <li className="flex justify-between font-semibold">
+                  <span>Inicial (hoy)</span>
+                  <span>{formatUsd(quote.credit.downCents)}</span>
+                </li>
+                {quote.credit.installments.map((i) => (
+                  <li key={i.number} className="flex justify-between">
+                    <span>Cuota {i.number} · {day(i.dueDate)}</span>
+                    <span>{formatUsd(i.amountCents)}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-1 text-danger">{quote.credit.reason}</p>
+            )}
+            {quote.credit.ok ? (
+              <label className="mt-3 flex items-start gap-2 text-xs">
+                <input type="checkbox" name="acceptCredit" required className="mt-0.5 size-4 accent-[var(--brand)]" />
+                <span>
+                  Acepto este plan de pagos y el{" "}
+                  <Link href="/credito" target="_blank" className="font-semibold underline">contrato Credi-SF</Link>. Desde el día {quote.credit.graceDays + 1} de atraso se suma un
+                  recargo de {formatUsd(quote.credit.lateFeeCents)}.
+                </span>
+              </label>
+            ) : null}
+          </div>
+        ) : null}
         {quote && !quote.bcv ? (
           <p className="mt-3 rounded-xl bg-store-soft p-3 text-xs">La tienda aún no cargó la tasa del día. Puedes pedir por WhatsApp.</p>
         ) : null}
@@ -314,12 +407,14 @@ export function CheckoutForm({
 
         <button
           type="submit"
-          disabled={pending || !t || problems.length > 0}
+          disabled={pending || !t || problems.length > 0 || (payMode === "credit" && (!creditReady || !quote?.credit?.ok))}
           className="mt-4 w-full rounded-full bg-brand px-4 py-3.5 font-semibold text-on-brand transition hover:brightness-110 disabled:opacity-50"
         >
-          {pending ? "Creando tu pedido…" : "Confirmar pedido"}
+          {pending ? "Creando tu pedido…" : creditReady ? "Confirmar compra a crédito" : "Confirmar pedido"}
         </button>
-        <p className="mt-2 text-center text-xs text-store-muted">En el siguiente paso eliges cómo pagar: Pago Móvil, transferencia, Zelle o USDT.</p>
+        <p className="mt-2 text-center text-xs text-store-muted">
+          {creditReady ? "En el siguiente paso pagas la inicial" : "En el siguiente paso eliges cómo pagar"}: Pago Móvil, transferencia, Zelle o USDT.
+        </p>
       </aside>
     </form>
   );

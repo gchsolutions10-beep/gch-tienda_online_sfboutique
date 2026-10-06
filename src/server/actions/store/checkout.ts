@@ -9,6 +9,8 @@ import { normalizeVePhone, parseVeId } from "@/lib/ve-ids";
 import { parseAmount } from "@/lib/money";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/payments";
 import { sniffProofMime, PROOF_MAX_BYTES } from "@/lib/files";
+import { getCurrentCustomer } from "@/server/auth/customer-session";
+import { quoteCredit } from "@/server/services/credit";
 
 const fulfillment = z.enum(["PICKUP", "LOCAL_DELIVERY", "NATIONAL_SHIPPING"]);
 const lines = z
@@ -25,11 +27,23 @@ function merge(raw: CheckoutLine[]): CheckoutLine[] {
 
 /** Precios, stock y totales reales para la pantalla de checkout. */
 export async function quoteCheckout(raw: unknown) {
-  const parsed = z.object({ lines, fulfillment }).safeParse(raw);
+  const parsed = z.object({ lines, fulfillment, credit: z.boolean().optional() }).safeParse(raw);
   if (!parsed.success) return null;
   const tenant = await getTenantFromRequest();
   const q = await quoteLines(tenant.id, merge(parsed.data.lines), parsed.data.fulfillment);
+  // Plan a crédito con el nivel de la clienta (solo con sesión).
+  const me = parsed.data.credit ? await getCurrentCustomer(tenant.id) : null;
+  const cq = me && q.totals ? await quoteCredit(tenant.id, me.id, q.totals.totalCents) : null;
   return {
+    credit: cq && {
+      ok: cq.eligibility.ok,
+      reason: cq.eligibility.ok ? null : cq.eligibility.reason,
+      level: cq.level,
+      downCents: cq.plan.downCents,
+      installments: cq.plan.installments.map((i) => ({ number: i.number, dueDate: i.dueDate.toISOString(), amountCents: i.amountCents })),
+      lateFeeCents: cq.settings.lateFeeCents,
+      graceDays: cq.settings.graceDays,
+    },
     bcv: q.bcv,
     lines: q.priced.map((p) => ({
       variantId: p.line.variantId,
@@ -66,6 +80,8 @@ const orderInput = z.object({
   office: z.string().trim().max(160),
   notes: z.string().trim().max(400),
   acceptTerms: z.literal(true, { message: "Debes aceptar las condiciones" }),
+  payMode: z.enum(["cash", "credit"]).default("cash"),
+  acceptCredit: z.boolean().default(false),
 });
 
 type PlaceResult = { ok: true; token: string; number: number } | { ok: false; error: string; field?: string };
@@ -77,9 +93,16 @@ export async function placeOrder(raw: unknown): Promise<PlaceResult> {
     return { ok: false, error: issue?.message ?? "Revisa los datos", field: String(issue?.path[0] ?? "") };
   }
   const d = parsed.data;
-  const phone = normalizeVePhone(d.phone);
+  const tenant = await getTenantFromRequest();
+  // A crédito los datos salen de la cuenta con sesión (no de lo escrito en el formulario).
+  const me = d.payMode === "credit" ? await getCurrentCustomer(tenant.id) : null;
+  if (d.payMode === "credit") {
+    if (!me) return { ok: false, error: "Entra a tu cuenta para comprar a crédito" };
+    if (!d.acceptCredit) return { ok: false, error: "Acepta el plan de pagos y el contrato Credi-SF", field: "acceptCredit" };
+  }
+  const phone = me ? me.phone : normalizeVePhone(d.phone);
   if (!phone) return { ok: false, error: "Escribe un teléfono venezolano válido, por ejemplo 0414-1234567", field: "phone" };
-  const id = parseVeId(d.idDoc);
+  const id = me?.idNumber ? { type: me.idType ?? "V", number: me.idNumber } : parseVeId(d.idDoc);
   if (!id) return { ok: false, error: "Escribe tu cédula o RIF, por ejemplo V-12345678", field: "idDoc" };
   if (d.fulfillment !== "PICKUP" && (!d.city || !d.address)) {
     return { ok: false, error: d.fulfillment === "NATIONAL_SHIPPING" ? "Indica la ciudad y la oficina o dirección de envío" : "Indica tu dirección", field: "address" };
@@ -88,7 +111,6 @@ export async function placeOrder(raw: unknown): Promise<PlaceResult> {
     return { ok: false, error: "Elige el estado y la empresa de envío", field: "state" };
   }
 
-  const tenant = await getTenantFromRequest();
   const limit = await hit("checkout", `${tenant.id}:${await clientIp()}`);
   if (!limit.ok) return { ok: false, error: tooManyMessage(limit.retryAfterSec) };
 
@@ -97,7 +119,9 @@ export async function placeOrder(raw: unknown): Promise<PlaceResult> {
       idempotencyKey: d.idempotencyKey,
       lines: merge(d.lines),
       fulfillment: d.fulfillment,
-      customer: { name: d.name, idType: id.type, idNumber: id.number, phone, email: d.email || null },
+      customer: me
+        ? { name: [me.firstName, me.lastName].filter(Boolean).join(" "), idType: id.type, idNumber: id.number, phone, email: me.email }
+        : { name: d.name, idType: id.type, idNumber: id.number, phone, email: d.email || null },
       shipping: {
         state: d.state || null,
         city: d.city || null,
@@ -107,6 +131,7 @@ export async function placeOrder(raw: unknown): Promise<PlaceResult> {
         office: d.office || null,
       },
       notes: d.notes || null,
+      credit: me ? { customerId: me.id } : null,
     });
     return { ok: true, token: order.trackingToken, number: order.number };
   } catch (e) {

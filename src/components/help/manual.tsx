@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 export const MANUAL_SECTIONS = [
   { id: "duena", title: "Dueña o administradora", icon: "👑" },
   { id: "tienda", title: "Encargada y vendedoras", icon: "🛍️" },
+  { id: "credito", title: "Credi-SF (compras a crédito)", icon: "🗓️" },
   { id: "contenido", title: "Blog, portada y banners", icon: "📝" },
   { id: "clienta", title: "Cómo compra la clienta", icon: "📱" },
   { id: "prueba", title: "Guion de prueba", icon: "✅" },
@@ -166,6 +167,57 @@ export function StoreManual() {
   );
 }
 
+export function CreditManual() {
+  return (
+    <>
+      <p>
+        Las clientas compran pagando una <B>inicial</B> y el resto en <B>cuotas cada 15 días</B>. Con cada crédito pagado a tiempo suben de nivel y mejoran sus
+        condiciones. Lo gestionan la dueña y la encargada.
+      </p>
+      <H3>1. Activarlo (dueña)</H3>
+      <Steps>
+        <li>
+          <Go href="/admin/credito/configuracion">Credi-SF → Configuración</Go>: activa la compra a crédito, el <B>recargo por mora</B> (por defecto $5) y los{" "}
+          <B>días de gracia</B> (5), el <B>máximo a financiar por nivel</B> y cuántos créditos a tiempo hacen falta para subir de nivel.
+        </li>
+        <li>Niveles: 1 = 60 % + 2 cuotas del 20 %; 2 = 50 % + 3 cuotas; 3 = 40 % + 4 cuotas.</li>
+      </Steps>
+      <Tip>Valida el contrato y el recargo con un abogado antes de ofrecer crédito.</Tip>
+      <H3>2. Aprobar solicitudes</H3>
+      <Steps>
+        <li>
+          La clienta crea su cuenta en la tienda («Mi cuenta»), llena su solicitud (dirección con el pin del mapa, foto de su cédula y datos del fiador) y acepta el
+          contrato. Su fiador recibe un enlace y acepta desde su propio teléfono.
+        </li>
+        <li>
+          <Go href="/admin/credito?vista=solicitudes">Credi-SF → Solicitudes</Go>: abre la solicitud, mira las cédulas y el mapa, y toca{" "}
+          <B>«Verificar por WhatsApp»</B> para confirmar que el teléfono es de ella.
+        </li>
+        <li>
+          Marca «Hablé con la clienta…» y <B>«✓ Aprobar crédito»</B>. Si no, <B>«Rechazar»</B> con el motivo (ella lo ve).
+        </li>
+      </Steps>
+      <H3>3. Cobrar</H3>
+      <Steps>
+        <li>
+          La compra a crédito llega a <B>Pedidos</B> como cualquier otra. Al confirmar la inicial se entrega la ropa y baja el stock. Las cuotas se confirman igual
+          (pagos reportados o «Registrar pago recibido»), aunque el pedido ya esté entregado.
+        </li>
+        <li>
+          <Go href="/admin/credito">Credi-SF → Cobranza</Go>: cuotas vencidas y por vencer en 7 días, con un botón de <B>WhatsApp</B> y el mensaje listo.
+        </li>
+        <li>
+          Todos los días a las 9 a. m. el sistema manda los avisos al teléfono de la clienta (2 días antes, el día del pago y al 3.er día de retraso) y, desde el
+          día 6 de atraso, suma el recargo y la baja a Nivel 1.
+        </li>
+        <li>
+          En la ficha de la clienta (<Go href="/admin/clientes">Clientes</Go>) puedes <B>fijar su nivel a mano</B> o <B>suspender</B> su crédito.
+        </li>
+      </Steps>
+    </>
+  );
+}
+
 export function ContentManual() {
   return (
     <>
@@ -221,6 +273,14 @@ export function CustomerManual() {
           En la página de su pedido elige cómo pagar, copia los datos de la cuenta con un toque y <B>«Reportar pago»</B> con la referencia y la captura.
         </li>
         <li>Esa página (guárdala) le muestra en todo momento el estado: pago confirmado, preparando, enviado con su guía, entregado.</li>
+        <li>
+          <B>A crédito:</B> entra en «Mi cuenta» (el ícono de la persona arriba), y al finalizar la compra elige <B>«Pagar a crédito (Credi-SF)»</B>: ve la
+          inicial y las fechas de cada cuota. Paga la inicial como cualquier pago y luego cada cuota desde la misma página del pedido.
+        </li>
+        <li>
+          <B>App en el teléfono:</B> en «Mi cuenta» toca «Instalar la app» (en iPhone: Compartir → Agregar a inicio) y «Activar avisos» para recibir los
+          recordatorios.
+        </li>
       </Steps>
     </>
   );

@@ -12,6 +12,7 @@ const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerO
   { href: "/admin/productos", label: "Productos y stock", icon: "👗" },
   { href: "/admin/caja", label: "Caja (venta en tienda)", icon: "💵" },
   { href: "/admin/clientes", label: "Clientes (CRM)", icon: "👥" },
+  { href: "/admin/credito", label: "Credi-SF (crédito)", icon: "🗓️", managerOnly: true },
   { href: "/admin/facturacion", label: "Facturación", icon: "📑" },
   { href: "/admin/reportes", label: "Reportes", icon: "📈", managerOnly: true },
   { href: "/admin/blog", label: "Blog y lookbook", icon: "📝", contentOnly: true },

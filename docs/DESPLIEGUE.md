@@ -135,6 +135,24 @@ Cuando la boutique tenga su dominio (por ejemplo `sfboutique.com`):
 
 La dirección `sfboutique.vercel.app` sigue funcionando.
 
+## 7. App instalable, avisos push y Credi-SF
+
+Para que los avisos lleguen al teléfono y la cobranza diaria corra, agrega en Vercel (**Settings → Environment Variables**):
+
+| Variable | Valor |
+|---|---|
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | llave pública (ver abajo) |
+| `VAPID_PRIVATE_KEY` | llave privada (ver abajo) — **secreta** |
+| `VAPID_SUBJECT` | `mailto:tu-correo@ejemplo.com` |
+| `CRON_SECRET` | una clave larga inventada (ej. 40 letras y números) |
+
+1. En tu computadora, en la carpeta del proyecto: `npm run push:llaves`. Copia la *Public Key* y la *Private Key*.
+2. Pégalas en Vercel con los nombres de arriba y vuelve a publicar (Deployments → ⋯ → Redeploy).
+3. La tarea diaria ya está en `vercel.json` (todos los días a las 9:00 a. m. de Venezuela). Vercel le manda el `CRON_SECRET` sola.
+
+Sin las llaves la tienda funciona igual, pero no se mandan avisos al teléfono (el botón «Activar avisos» no aparece).
+Si cambias las llaves, las clientas tienen que volver a activar los avisos.
+
 ---
 
 ## Problemas comunes

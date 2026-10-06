@@ -94,7 +94,22 @@ export const TEST_SCRIPT: Group[] = [
     ],
   },
   {
-    title: "8. Reportes y clientas",
+    title: "8. Credi-SF y la app",
+    who: "Clienta (celular) + dueña",
+    tests: [
+      { id: "k1", text: "Credi-SF → Configuración: activa el crédito y revisa recargo ($5), días de gracia (5) y límites por nivel." },
+      { id: "k2", text: "En el celular: «Mi cuenta» → «Crear cuenta». Luego «Solicitar mi crédito»: dirección, pin en el mapa, foto de la cédula y datos del fiador." },
+      { id: "k3", text: "Abre el enlace del fiador en OTRO teléfono: con una cédula distinta lo rechaza; con la correcta acepta." },
+      { id: "k4", text: "Panel → Credi-SF → Solicitudes: revisa las cédulas, «Verificar por WhatsApp» y aprueba." },
+      { id: "k5", text: "En la tienda, compra a crédito: aparece la inicial y las fechas de las 2 cuotas. Intenta una compra que pase el límite: no lo permite." },
+      { id: "k6", text: "Reporta la inicial; en el panel confírmala: el pedido pasa a Pagado y baja el stock. Luego registra una cuota." },
+      { id: "k7", text: "«Mi cuenta» → «Instalar la app» (iPhone: Compartir → Agregar a inicio) y «Activar avisos». Al confirmar una cuota llega el aviso al teléfono." },
+      { id: "k8", text: "Clientes → la clienta: fija Nivel 3 a mano y verifica que su próxima compra a crédito pide 40 % de inicial." },
+      { id: "k9", text: "Apaga el wifi y abre la app: sale «Estás sin conexión» o la última página vista." },
+    ],
+  },
+  {
+    title: "9. Reportes y clientas",
     who: "Dueña",
     tests: [
       { id: "h1", text: "Reportes → «Últimos 7 días»: revisa ventas, utilidad y lo más vendido por talla y color." },

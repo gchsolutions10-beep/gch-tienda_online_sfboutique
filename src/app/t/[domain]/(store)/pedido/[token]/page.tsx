@@ -10,6 +10,9 @@ import { customerSteps, FULFILLMENT, ORDER_STATUS, timeLeft, UNPAID_STATUSES } f
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/payments";
 import { formatVePhone, whatsappLink } from "@/lib/ve-ids";
 import { cn } from "@/components/ui/styles";
+import { CreditSchedule } from "@/components/credit-schedule";
+import { getCreditSettings } from "@/server/services/credit";
+import { allocatePayments } from "@/lib/credit";
 
 export const metadata: Metadata = { title: "Tu pedido", robots: { index: false } };
 
@@ -25,11 +28,19 @@ export default async function OrderTrackingPage({ params }: PageProps<"/t/[domai
     include: {
       items: { include: { product: { select: { slug: true, images: { orderBy: { sortOrder: "asc" }, take: 1, select: { url: true } } } } } },
       payments: { orderBy: { createdAt: "asc" }, select: { id: true, method: true, currency: true, amount: true, amountUsd: true, igtfAmount: true, status: true, reference: true, createdAt: true } },
+      creditPlan: {
+        select: {
+          status: true,
+          level: true,
+          downPaymentUsd: true,
+          installments: { orderBy: { number: "asc" }, select: { number: true, dueDate: true, amountUsd: true, lateFeeUsd: true, paidUsd: true, paidAt: true } },
+        },
+      },
     },
   });
   if (!order) notFound();
 
-  const [rates, accounts, settings] = await Promise.all([
+  const [rates, accounts, settings, creditSettings] = await Promise.all([
     getCurrentRates(tenant.id),
     tdb.financialAccount.findMany({
       where: { isActive: true, showInCheckout: true },
@@ -37,6 +48,7 @@ export default async function OrderTrackingPage({ params }: PageProps<"/t/[domai
       select: { id: true, name: true, type: true, currency: true, bankName: true, bankCode: true, accountNumber: true, holderName: true, holderIdType: true, holderIdNumber: true, phone: true, email: true, walletId: true },
     }),
     getDeliverySettings(tenant.id),
+    getCreditSettings(tenant.id),
   ]);
 
   const totalCents = toCents(order.totalUsd);
@@ -44,8 +56,24 @@ export default async function OrderTrackingPage({ params }: PageProps<"/t/[domai
   const credit = (p: (typeof order.payments)[number]) => toCents(p.amountUsd) - (p.currency === "VES" ? 0 : toCents(p.igtfAmount));
   const confirmed = order.payments.filter((p) => p.status === "CONFIRMED").reduce((a, p) => a + credit(p), 0);
   const inReview = order.payments.filter((p) => p.status === "PENDING_REVIEW").reduce((a, p) => a + credit(p), 0);
-  const remaining = Math.max(0, totalCents - confirmed - inReview);
-  const unpaid = UNPAID_STATUSES.includes(order.status);
+  const plan = order.creditPlan;
+  // A crédito: se sugiere pagar lo que falta de la inicial y, después, la próxima cuota (con su recargo si lo tiene).
+  const alloc = plan
+    ? allocatePayments(
+        toCents(plan.downPaymentUsd),
+        plan.installments.map((i) => ({ amountCents: toCents(i.amountUsd), lateFeeCents: toCents(i.lateFeeUsd) })),
+        confirmed + inReview,
+      )
+    : null;
+  const nextInstallment = plan && alloc ? plan.installments.findIndex((i, k) => alloc.paid[k] < toCents(i.amountUsd) + toCents(i.lateFeeUsd)) : -1;
+  const remaining = plan && alloc
+    ? alloc.downPaid < toCents(plan.downPaymentUsd)
+      ? toCents(plan.downPaymentUsd) - alloc.downPaid
+      : nextInstallment >= 0
+        ? toCents(plan.installments[nextInstallment].amountUsd) + toCents(plan.installments[nextInstallment].lateFeeUsd) - alloc.paid[nextInstallment]
+        : 0
+    : Math.max(0, totalCents - confirmed - inReview);
+  const unpaid = UNPAID_STATUSES.includes(order.status) || (plan?.status === "ACTIVE" && order.status !== "CANCELLED");
   const bcv = rates.bcv?.rate ?? Number(order.bcvRate);
   const status = ORDER_STATUS[order.status];
   const left = order.reservedUntil && order.status === "PENDING" ? timeLeft(order.reservedUntil) : null;
@@ -97,7 +125,9 @@ export default async function OrderTrackingPage({ params }: PageProps<"/t/[domai
           {unpaid ? (
             <section className="rounded-3xl bg-store-card p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="font-display text-2xl font-semibold">Paga tu pedido</h2>
+                <h2 className="font-display text-2xl font-semibold">
+                  {plan ? (alloc && alloc.downPaid >= toCents(plan.downPaymentUsd) ? `Paga tu cuota ${nextInstallment + 1}` : "Paga tu inicial") : "Paga tu pedido"}
+                </h2>
                 {left ? <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">Apartado por {left} más</span> : null}
               </div>
               {order.status === "PAYMENT_REVIEW" ? (
@@ -113,6 +143,22 @@ export default async function OrderTrackingPage({ params }: PageProps<"/t/[domai
                   <p className="mt-3 text-sm text-store-muted">Escríbenos por WhatsApp para recibir los datos de pago.</p>
                 )
               ) : null}
+            </section>
+          ) : null}
+
+          {plan ? (
+            <section className="rounded-3xl bg-store-card p-5 shadow-sm sm:p-6">
+              <h2 className="font-display text-xl font-semibold">Tu plan Credi-SF · Nivel {plan.level}</h2>
+              <p className="mb-2 text-sm text-store-muted">
+                {plan.status === "PAID" ? "¡Pagado completo! Gracias por tu puntualidad." : `Quedan ${formatUsd(alloc?.remainingCents ?? 0)} por pagar (incluye lo reportado en revisión).`}
+              </p>
+              <CreditSchedule
+                down={plan.downPaymentUsd}
+                downPaid={!UNPAID_STATUSES.includes(order.status)}
+                rows={plan.installments}
+                graceDays={creditSettings.graceDays}
+                now={new Date()}
+              />
             </section>
           ) : null}
 

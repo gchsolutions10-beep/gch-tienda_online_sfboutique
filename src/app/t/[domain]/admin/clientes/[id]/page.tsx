@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getTenant } from "@/server/tenant";
-import { CASHIER_ROLES, requireStaff } from "@/server/auth/guards";
+import { CASHIER_ROLES, isTenantAdmin, requireStaff } from "@/server/auth/guards";
+import { tenantDb } from "@/server/db";
+import { CustomerCreditForm } from "@/components/admin/credit-forms";
+import { asLevel, CREDIT_LEVELS } from "@/lib/credit";
 import { getCustomer } from "@/server/queries/crm";
 import { PageHeader } from "@/components/admin/page-header";
 import { OrderStatusBadge } from "@/components/admin/order-badges";
@@ -17,9 +20,15 @@ export const metadata = { title: "Clienta" };
 export default async function CustomerPage({ params }: PageProps<"/t/[domain]/admin/clientes/[id]">) {
   const { domain, id } = await params;
   const tenant = await getTenant(domain);
-  await requireStaff(tenant, CASHIER_ROLES, `/admin/clientes/${id}`);
+  const ctx = await requireStaff(tenant, CASHIER_ROLES, `/admin/clientes/${id}`);
   const data = await getCustomer(tenant.id, id);
   if (!data) notFound();
+  const manager = isTenantAdmin(ctx) || ctx.roles.includes("BRANCH_ADMIN");
+  const tdb = tenantDb(tenant.id);
+  const [creditApp, creditPlans] = await Promise.all([
+    tdb.creditApplication.findFirst({ where: { customerId: id }, orderBy: { createdAt: "desc" }, select: { id: true, status: true } }),
+    tdb.creditPlan.findMany({ where: { customerId: id, status: { not: "CANCELLED" } }, orderBy: { createdAt: "desc" }, select: { status: true, wentLate: true, order: { select: { id: true, number: true } } } }),
+  ]);
   const { customer: c, tags, rules } = data;
   const stats = { ordersCount: c.ordersCount, totalSpentUsdCents: toCents(c.totalSpentUsd), firstOrderAt: c.firstOrderAt, lastOrderAt: c.lastOrderAt };
   const segments = autoSegments(stats, rules);
@@ -109,6 +118,35 @@ export default async function CustomerPage({ params }: PageProps<"/t/[domain]/ad
               ))}
             </ul>
           </section>
+          {data.customer.creditStatus !== "NONE" || creditApp ? (
+            <section className={cn(card, "p-5 text-sm")}>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-lg font-bold">Credi-SF</h2>
+                <span className="font-semibold">
+                  {CREDIT_LEVELS[asLevel(c.creditLevel)].name}
+                  {c.creditLevelManual ? " (fijado a mano)" : ""} ·{" "}
+                  {{ NONE: "Sin crédito", PENDING: "Solicitud en curso", APPROVED: "Crédito activo", REJECTED: "Rechazado", SUSPENDED: "Suspendido" }[c.creditStatus]}
+                </span>
+              </div>
+              {c.creditLevelNote ? <p className="mt-1 text-xs text-muted">{c.creditLevelNote}</p> : null}
+              <p className="mt-2">
+                {creditPlans.filter((p) => p.status === "PAID" && !p.wentLate).length} créditos pagados a tiempo ·{" "}
+                {creditPlans.filter((p) => p.status === "ACTIVE").length} abiertos · {creditPlans.filter((p) => p.wentLate).length} con mora
+              </p>
+              <p className="mt-1 flex flex-wrap gap-3">
+                {creditApp ? <Link href={`/admin/credito/solicitudes/${creditApp.id}`} className="font-semibold underline">Ver solicitud y cédulas</Link> : null}
+                {creditPlans.slice(0, 5).map((p) => (
+                  <Link key={p.order.id} href={`/admin/pedidos/${p.order.id}`} className="underline">#{p.order.number}</Link>
+                ))}
+              </p>
+              {manager && (c.creditStatus === "APPROVED" || c.creditStatus === "SUSPENDED") ? (
+                <div className="mt-3 border-t border-line pt-3">
+                  <CustomerCreditForm customerId={c.id} level={c.creditLevel} manual={c.creditLevelManual} status={c.creditStatus} note={c.creditLevelNote} />
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           <section>
             <h2 className="mb-2 text-lg font-bold">Datos</h2>
             <CustomerForm

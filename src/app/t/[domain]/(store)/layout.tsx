@@ -5,6 +5,7 @@ import { tenantDb } from "@/server/db";
 import { getCurrentRates, getDisplayRate, getStoreSettings } from "@/server/queries/store";
 import { SiteHeader } from "@/components/store/site-header";
 import { BagDrawer } from "@/components/store/bag-drawer";
+import { ServiceWorkerRegister } from "@/components/store/pwa";
 import { tenantThemeStyle } from "@/lib/theme";
 import { formatRate } from "@/lib/money";
 import { formatVePhone, whatsappLink } from "@/lib/ve-ids";
@@ -76,9 +77,16 @@ export default async function StoreLayout({ children, params }: LayoutProps<"/t/
             <p className="font-semibold uppercase tracking-widest opacity-80">Pagos</p>
             <p className="mt-3 opacity-90">Pago Móvil · Transferencia · Punto de venta · Efectivo Bs y USD · Zelle · USDT</p>
             {rates.bcv ? <p className="mt-3 text-xs opacity-80">Tasa BCV: {formatRate(rates.bcv.rate)}</p> : null}
-            <Link href="/login" className="mt-4 inline-block text-xs opacity-80 hover:underline">
-              Acceso del personal
-            </Link>
+            <p className="mt-3">
+              <Link href="/credito" className="font-semibold hover:underline">
+                Credi-SF: compra a crédito →
+              </Link>
+            </p>
+            <p className="mt-4 flex flex-wrap gap-x-3 gap-y-1 text-xs opacity-80">
+              <Link href="/mi-cuenta" className="hover:underline">Mi cuenta</Link>
+              <Link href="/privacidad" className="hover:underline">Privacidad</Link>
+              <Link href="/login" className="hover:underline">Acceso del personal</Link>
+            </p>
           </div>
         </div>
         <p className="border-t border-current/15 px-6 py-4 text-center text-xs opacity-80">
@@ -88,6 +96,7 @@ export default async function StoreLayout({ children, params }: LayoutProps<"/t/
       </footer>
 
       <BagDrawer rate={displayRate} whatsapp={tenant.contactPhone} storeName={tenant.name} />
+      <ServiceWorkerRegister />
     </div>
   );
 }

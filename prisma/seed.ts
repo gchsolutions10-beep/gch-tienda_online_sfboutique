@@ -126,6 +126,8 @@ async function main() {
       localDeliveryArea: "Acarigua y Araure",
       nationalShippingUsd: null,
       nextOrderNumber: 1001,
+      // Credi-SF encendido en la demo (la dueña lo apaga en Credi-SF > Configuración).
+      creditEnabled: true,
     },
   });
 
@@ -133,8 +135,9 @@ async function main() {
   await db.invoice.deleteMany({ where: { tenantId, relatedInvoiceId: { not: null } } });
   await db.invoice.deleteMany({ where: { tenantId } });
   await db.order.deleteMany({ where: { tenantId } });
+  await db.pushSubscription.deleteMany({ where: { tenantId } });
   await db.cashSession.deleteMany({ where: { tenantId } });
-  await db.tenantAsset.deleteMany({ where: { tenantId, OR: ["comprobante-", "producto-", "banner-", "portada-", "blog-"].map((p) => ({ kind: { startsWith: p } })) } });
+  await db.tenantAsset.deleteMany({ where: { tenantId, OR: ["comprobante-", "producto-", "banner-", "portada-", "blog-", "credito-"].map((p) => ({ kind: { startsWith: p } })) } });
   await db.blogPost.deleteMany({ where: { tenantId } });
   await db.product.deleteMany({ where: { tenantId } });
   await db.category.deleteMany({ where: { tenantId } });
