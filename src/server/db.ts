@@ -61,6 +61,10 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   "HeroCard",
   "BlogCategory",
   "BlogPost",
+  "CustomerSession",
+  "CreditApplication",
+  "CreditPlan",
+  "PushSubscription",
 ]);
 
 const WHERE_OPERATIONS = new Set([

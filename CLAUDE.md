@@ -12,11 +12,14 @@ Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSo
   commit en una rama `fase-N-…`, unir a `main` cuando lo pida, y explicar qué se hizo y qué falta.
 
 ## Estado (5 de octubre de 2026)
-- Fases 1–5 listas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago, pedidos,
+- Fases 1–6 listas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago, pedidos,
   productos/stock, envíos, cuentas de cobro, caja multimoneda con cierre, CRM, **facturación venezolana con IGTF**
   (facturas, notas de crédito/débito, número de control, libro de ventas), **editor del blog, portada y banners**, y
-  **reportes de gestión** (ventas, márgenes, BCV vs P2P, inventario) con **dominio propio**. Detalle en
-  `docs/ARQUITECTURA.md` (secciones 5c y 5d).
+  **reportes de gestión** (ventas, márgenes, BCV vs P2P, inventario) con **dominio propio**, y **Credi-SF** (crédito con
+  fiador, niveles, cobranza y mora) con cuentas de clientas, **PWA instalable y avisos push**. Detalle en
+  `docs/ARQUITECTURA.md` (secciones 5c, 5d y 5e).
+- Credi-SF necesita en Vercel `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` y `CRON_SECRET`
+  (guía en `docs/DESPLIEGUE.md` §7). El contrato y el recargo por mora: «validar con un abogado».
 - Siguiente: lo que pida el usuario tras mostrar la demo (p. ej. imprenta digital conectada, nota de entrega).
 - Lo legal/fiscal (IVA, IGTF, número de control) se marca siempre «validar con el contador»; el sistema no sustituye a la
   imprenta digital: guarda el número de control que ella asigna.
@@ -52,3 +55,6 @@ Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSo
   en silencio (usa la herramienta de edición).
 - Formularios con `action={fn}` se vacían tras un error: usa `onSubmit` + `preventDefault` y `method="post"`.
 - Cédula/RIF: `parseVeId` / `formatVeId`; teléfonos `normalizeVePhone` (+58).
+- Dentro de `$transaction` no consultes con `tenantDb()`/`db` (otra conexión): pasa el `tx` (ej. `getCreditSettings(id, tx)`);
+  con una sola conexión la transacción se traba hasta el timeout.
+- Archivos `"use server"` solo pueden exportar funciones async (ni constantes ni tipos de valor).

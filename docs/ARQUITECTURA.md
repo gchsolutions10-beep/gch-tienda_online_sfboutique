@@ -127,6 +127,19 @@ El **IGTF** de los pagos en divisas se calcula desde la fase 4 (sección 5c).
 - Ventas = pedidos con `paidAt` en el periodo y no anulados. Exportación CSV por prenda (`/admin/reportes/exportar`); costo y utilidad solo para la dueña. La encargada ve ventas sin costos.
 - **Dominio propio** (Apariencia): registra el dominio con y sin www en `TenantDomain` (`parseCustomDomain`, `domainPair`); luego se agrega en Vercel y en el DNS (ver `docs/DESPLIEGUE.md`).
 
+## 5e. Credi-SF (crédito), cuentas de clientas y PWA (fase 6)
+
+> Lo legal (contrato, recargo, fianza) se marca «validar con un abogado venezolano».
+
+- **Cuentas de clientas** (solo para crédito; de contado no hace falta): `Customer.passwordHash`, sesión propia `CustomerSession` con cookie `gch_clienta` (`src/server/auth/customer-session.ts`), páginas `/mi-cuenta`. Si el teléfono ya existe en el CRM con otra cédula, no se le pisan los datos. La tienda confirma el teléfono al aprobar (`phoneVerifiedAt`).
+- **Solicitud** (`/credito/solicitud`, `CreditApplication`): dirección con pin de OpenStreetMap/Leaflet (latitud/longitud obligatorias), fotos de las cédulas de la compradora y del fiador como `TenantAsset` PRIVADOS (`credito-<id>-compradora|fiador`, solo dueña/encargada en `/admin/credito/cedula/…`). Se guardan la versión del contrato (`src/lib/credit-contract.ts`), el **SHA-256 del texto exacto**, fecha, IP y dispositivo.
+- **Fiador**: acepta él mismo en `/credito/fiador/<token>` confirmando su cédula (WAITING_GUARANTOR → IN_REVIEW). Sin eso no se puede aprobar.
+- **Niveles** (`src/lib/credit.ts`): 1 = 60 % + 2×20 %; 2 = 50 % + 3 cuotas; 3 = 40 % + 4 cuotas; cuotas cada 15 días, vencen al final del día en Caracas. Ascenso automático (nunca baja sola) tras `creditUpgradeAfter`/`creditVipAfter` créditos pagados sin mora; nivel fijo a mano (`creditLevelManual`); la mora (recargo aplicado en los últimos 6 meses o cuota en mora) lo deja en Nivel 1 aunque esté fijado. Límite financiado por nivel y un crédito abierto a la vez (configurables).
+- **Pedido a crédito**: `Order.isCredit` + `CreditPlan` + `CreditInstallment`. Con la **inicial** el pedido pasa a Pagado y se descuenta el stock; lo pagado (neto de IGTF) se reparte en orden: inicial → cuotas con su recargo (`allocatePayments`, `syncCreditPlan`). El pedido debe `totalUsd + recargos`. Se pueden reportar y registrar pagos de cuotas después de entregado. Anular el pedido (o que venza el apartado) anula el plan.
+- **Mora y cobranza**: tarea diaria `GET /api/cron/credito` (Vercel Cron 13:00 UTC = 9 a. m. Caracas, `CRON_SECRET`): recargo fijo (`creditLateFeeUsd`) desde el día `creditGraceDays + 1`, una sola vez por cuota; marca `wentLate`; reevalúa el nivel; recordatorios push 2 días antes, el día y al 3.er día de retraso (idempotente: `remindedBeforeAt/DueAt/LateAt`). Panel `/admin/credito` (cobranza con WhatsApp, solicitudes, configuración) y sección Credi-SF en la ficha del CRM.
+- **PWA**: manifest por negocio en `/manifest`, íconos con la marca en `/icono/<96|180|192|512>` (`?maskable=1`), `public/sw.js` (red primero en páginas públicas con aviso sin conexión; caché de `/_next/static` y `/marca`; nunca guarda panel, cuenta, checkout ni pedidos). Push estándar Web Push con VAPID (`web-push`; sin Firebase): `PushSubscription` por clienta; `sendPushToCustomer` borra las suscripciones vencidas (404/410). En iPhone los avisos requieren instalar la app (iOS 16.4+).
+- Pruebas: `tests/unit/credit.test.ts` y de punta a punta `npx tsx tests/integration/credito.ts` (base local).
+
 ## 6. Propuesta de componentes de interfaz
 
 | Componente | Estado | Qué hace |
@@ -164,3 +177,4 @@ El **IGTF** de los pagos en divisas se calcula desde la fase 4 (sección 5c).
 | 3 | CRM de clientes + cuentas de cobro editables + caja multimoneda con cierre por moneda | ✅ |
 | 4 | Facturación venezolana (series, número de control, notas, libro de ventas, IGTF) + CMS del blog y banners | ✅ |
 | 5 | Reportes de gestión USD/Bs (ventas, márgenes, P2P vs BCV) y dominio propio | ✅ |
+| 6 | Credi-SF (crédito con fiador, niveles, cobranza y mora), cuentas de clientas, PWA instalable y avisos push | ✅ |

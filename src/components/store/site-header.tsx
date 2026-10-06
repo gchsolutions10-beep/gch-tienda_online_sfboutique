@@ -47,6 +47,9 @@ export function SiteHeader({ name, logoUrl, categories, rateLabel }: { name: str
             <button type="button" onClick={() => setSearch((v) => !v)} aria-label="Buscar" className="grid size-10 place-items-center rounded-full text-lg hover:bg-store-soft xl:hidden">
               ⌕
             </button>
+            <Link href="/mi-cuenta" aria-label="Mi cuenta" title="Mi cuenta y Credi-SF" className="grid size-10 place-items-center rounded-full hover:bg-store-soft">
+              <UserIcon />
+            </Link>
             <button type="button" onClick={openBag} aria-label={`Bolsa: ${bag.count} productos`} className="relative grid size-10 place-items-center rounded-full hover:bg-store-soft">
               <BagIcon />
               {bag.count ? (
@@ -74,9 +77,21 @@ export function SiteHeader({ name, logoUrl, categories, rateLabel }: { name: str
           <Link href="/blog" onClick={() => setMenu(false)} className="block rounded-xl px-3 py-2.5 font-medium hover:bg-store-soft">
             Blog
           </Link>
+          <Link href="/credito" onClick={() => setMenu(false)} className="block rounded-xl px-3 py-2.5 font-medium hover:bg-store-soft">
+            Credi-SF: compra a crédito
+          </Link>
         </nav>
       </div>
     </header>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-5" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </svg>
   );
 }
 

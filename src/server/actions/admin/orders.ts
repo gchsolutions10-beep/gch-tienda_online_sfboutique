@@ -6,6 +6,7 @@ import { getTenantFromRequest } from "@/server/tenant";
 import { tenantDb } from "@/server/db";
 import { CASHIER_ROLES, requireStaff } from "@/server/auth/guards";
 import { advanceOrder, cancelOrder, OrderError, registerPayment, reviewPayment, type Actor } from "@/server/services/orders";
+import { notifyCreditPayment } from "@/server/services/credit";
 import { parseAmount } from "@/lib/money";
 import { PAYMENT_METHODS, type PaymentMethod } from "@/lib/payments";
 
@@ -31,12 +32,28 @@ async function run(fn: () => Promise<Result>): Promise<Result> {
 
 const id = z.string().min(5).max(40);
 
+function paymentMessage(r: { full: boolean; releases: boolean; credit: boolean; plan: { finished: boolean; level: { from: number; to: number } | null } | null }, approve: boolean) {
+  if (!approve) return "Pago rechazado.";
+  if (r.credit) {
+    if (r.plan?.finished) {
+      const up = r.plan.level && r.plan.level.to > r.plan.level.from ? ` ¡La clienta subió a Nivel ${r.plan.level.to}!` : "";
+      return `Crédito pagado completo.${up}`;
+    }
+    return r.releases ? "Pago aplicado al crédito. La inicial está cubierta: se descontó el stock." : "Pago aplicado. Aún falta completar la inicial.";
+  }
+  return r.full ? "Pedido pagado completo. Se descontó el stock." : "Pago confirmado. Aún falta una parte.";
+}
+
 export async function reviewPaymentAction(paymentId: string, approve: boolean, note: string): Promise<Result> {
   const { tenant, actor } = await staff();
   if (!id.safeParse(paymentId).success) return { ok: false, error: "Pago inválido" };
   return run(async () => {
     const r = await reviewPayment(tenant.id, paymentId, approve, note.trim().slice(0, 200) || null, actor);
-    return { ok: true, message: r.full ? "Pedido pagado completo. Se descontó el stock." : approve ? "Pago confirmado. Aún falta una parte." : "Pago rechazado." };
+    if (approve && r.credit) {
+      const orderId = (await tenantDb(tenant.id).payment.findFirst({ where: { id: paymentId }, select: { orderId: true } }))?.orderId;
+      if (orderId) await notifyCreditPayment(tenant.id, orderId);
+    }
+    return { ok: true, message: paymentMessage(r, approve) };
   });
 }
 
@@ -74,7 +91,8 @@ export async function registerPaymentAction(orderId: string, raw: unknown): Prom
       },
       actor,
     );
-    return { ok: true, message: r.full ? "Pedido pagado completo. Se descontó el stock." : "Pago registrado. Aún falta una parte." };
+    if (r.credit) await notifyCreditPayment(tenant.id, orderId);
+    return { ok: true, message: paymentMessage(r, true) };
   });
 }
 

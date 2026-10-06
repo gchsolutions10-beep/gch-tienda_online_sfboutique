@@ -5,6 +5,8 @@ import { CASHIER_ROLES, requireStaff } from "@/server/auth/guards";
 import { tenantDb } from "@/server/db";
 import { getCurrentRates } from "@/server/queries/store";
 import { getDeliverySettings } from "@/server/services/orders";
+import { getCreditSettings } from "@/server/services/credit";
+import { CreditSchedule } from "@/components/credit-schedule";
 import { OrderStatusBadge, PaymentStatusText } from "@/components/admin/order-badges";
 import { OrderActions, PaymentReview } from "@/components/admin/order-actions";
 import { buttonPrimary, card, cn } from "@/components/ui/styles";
@@ -35,17 +37,28 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
       payments: { orderBy: { createdAt: "asc" }, include: { financialAccount: { select: { name: true } }, reviewedBy: { select: { name: true, email: true } } } },
       events: { orderBy: { createdAt: "desc" } },
       customer: { select: { id: true, ordersCount: true, totalSpentUsd: true } },
+      creditPlan: {
+        select: {
+          status: true,
+          level: true,
+          downPaymentUsd: true,
+          installments: { orderBy: { number: "asc" }, select: { number: true, dueDate: true, amountUsd: true, lateFeeUsd: true, paidUsd: true, paidAt: true } },
+        },
+      },
       invoices: { orderBy: { issuedAt: "asc" }, select: { id: true, type: true, number: true, status: true, controlNumber: true, totalVes: true, series: { select: { series: true } } } },
     },
   });
   if (!order) notFound();
-  const [accounts, rates, settings] = await Promise.all([
+  const [accounts, rates, settings, creditSettings] = await Promise.all([
     tdb.financialAccount.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" }, select: { id: true, name: true, type: true, currency: true } }),
     getCurrentRates(tenant.id),
     getDeliverySettings(tenant.id),
+    getCreditSettings(tenant.id),
   ]);
 
-  const total = toCents(order.totalUsd);
+  const plan = order.creditPlan;
+  const fees = plan ? plan.installments.reduce((a, i) => a + toCents(i.lateFeeUsd), 0) : 0;
+  const total = toCents(order.totalUsd) + fees;
   const paid = toCents(order.paidUsd);
   const remaining = Math.max(0, total - paid);
   const next = nextStatus(order.status, order.fulfillment);
@@ -120,6 +133,24 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
             </ul>
           </section>
 
+          {plan ? (
+            <section className={cn(card, "p-5")}>
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-lg font-bold">Crédito Credi-SF · Nivel {plan.level}</h2>
+                <span className="text-sm">{plan.status === "PAID" ? "Pagado completo" : plan.status === "CANCELLED" ? "Anulado" : `Falta ${formatUsd(remaining)}`}</span>
+              </div>
+              {fees ? <p className="mt-1 text-sm text-red-800">Incluye {formatUsd(fees)} de recargos por mora.</p> : null}
+              <div className="mt-2">
+                <CreditSchedule down={plan.downPaymentUsd} downPaid={Boolean(order.paidAt)} rows={plan.installments} graceDays={creditSettings.graceDays} now={new Date()} />
+              </div>
+              {order.customer ? (
+                <Link href={`/admin/clientes/${order.customer.id}`} className="mt-2 inline-block text-sm font-semibold text-brand-strong underline">
+                  Ver la clienta y su nivel de crédito →
+                </Link>
+              ) : null}
+            </section>
+          ) : null}
+
           {/* Artículos */}
           <section className={cn(card, "p-5")}>
             <h2 className="text-lg font-bold">Artículos</h2>
@@ -192,6 +223,7 @@ export default async function OrderDetailPage({ params }: PageProps<"/t/[domain]
             carrier={order.carrier}
             carriers={[...CARRIERS]}
             remainingUsdCents={remaining}
+            canPay={order.status !== "CANCELLED" && remaining > 0 && (order.status !== "DELIVERED" || plan?.status === "ACTIVE")}
             igtfRateBp={settings.igtfRateBp}
             bcvRate={rates.bcv?.rate ?? Number(order.bcvRate)}
             accounts={accounts}

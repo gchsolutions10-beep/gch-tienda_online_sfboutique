@@ -80,6 +80,7 @@ export function OrderActions({
   carrier,
   carriers,
   remainingUsdCents,
+  canPay,
   igtfRateBp,
   bcvRate,
   accounts,
@@ -92,6 +93,8 @@ export function OrderActions({
   carrier: string | null;
   carriers: string[];
   remainingUsdCents: number;
+  /** Se puede registrar un pago (a crédito, también después de entregado) */
+  canPay: boolean;
   /** IGTF sobre pagos en divisas (0 = no se cobra) */
   igtfRateBp: number;
   bcvRate: number;
@@ -139,7 +142,7 @@ export function OrderActions({
         </form>
       ) : null}
 
-      {!closed && remainingUsdCents > 0 ? (
+      {canPay ? (
         panel === "pay" ? (
           <form
             action={(f) =>

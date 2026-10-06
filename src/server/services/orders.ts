@@ -7,6 +7,7 @@ import { rateToBp, splitIgtf } from "@/lib/tax-ve";
 import { paymentAmounts } from "@/lib/payments";
 import { favoriteMethod } from "@/lib/crm";
 import { isFullyPaid, nextStatus, priceOrder, shippingFor, UNPAID_STATUSES, type Fulfillment } from "@/lib/orders";
+import { createCreditPlan, creditOwed, quoteCredit, syncCreditPlan } from "@/server/services/credit";
 
 type Tx = Parameters<Parameters<TenantDb["$transaction"]>[0]>[0];
 const money = centsToDecimalString;
@@ -58,6 +59,7 @@ export async function releaseExpiredReservations(tenantId: string) {
       });
       if (!claimed.count) return;
       await releaseReservation(tx, tenantId, id);
+      await tx.creditPlan.updateMany({ where: { orderId: id }, data: { status: "CANCELLED" } });
       await tx.orderEvent.create({ data: { orderId: id, fromStatus: "PENDING", toStatus: "CANCELLED", note: "Venció la reserva sin pago: se liberó el stock apartado" } });
     });
   }
@@ -175,6 +177,8 @@ export type CreateWebOrderInput = {
   customer: { name: string; idType: "V" | "E" | "J" | "G" | "P" | "C" | null; idNumber: string | null; phone: string; email: string | null };
   shipping: { state: string | null; city: string | null; address: string | null; reference: string | null; carrier: string | null; office: string | null };
   notes: string | null;
+  /** Compra a crédito (Credi-SF): la clienta con cuenta aprobada */
+  credit?: { customerId: string } | null;
 };
 
 /**
@@ -198,6 +202,9 @@ export async function createWebOrder(tenantId: string, input: CreateWebOrderInpu
     }
   }
   const t = q.totals;
+  // Crédito: se revisa de nuevo en el servidor (nivel, límite, mora) con el total real.
+  const credit = input.credit ? await quoteCredit(tenantId, input.credit.customerId, t.totalCents) : null;
+  if (credit && !credit.eligibility.ok) throw new OrderError(credit.eligibility.reason);
   const [firstName, ...rest] = input.customer.name.trim().split(/\s+/);
   const reservedUntil = new Date(Date.now() + q.settings.reservationHours * 3_600_000);
 
@@ -211,7 +218,8 @@ export async function createWebOrder(tenantId: string, input: CreateWebOrderInpu
         if (!n) throw new OrderError(`Alguien acaba de llevarse ${p.variant!.product.name}. Revisa tu bolsa.`);
       }
       const counter = await tx.tenantSettings.update({ where: { tenantId }, data: { nextOrderNumber: { increment: 1 } }, select: { nextOrderNumber: true } });
-      const customer = await tx.customer.upsert({
+      // A crédito, el pedido es de la cuenta con sesión (no se busca por el teléfono escrito).
+      const customer = input.credit ? { id: input.credit.customerId } : await tx.customer.upsert({
         where: { tenantId_phone: { tenantId, phone: input.customer.phone } },
         update: {
           ...(input.customer.idNumber ? { idType: input.customer.idType, idNumber: input.customer.idNumber } : {}),
@@ -233,7 +241,7 @@ export async function createWebOrder(tenantId: string, input: CreateWebOrderInpu
       });
       const national = input.fulfillment === "NATIONAL_SHIPPING";
       const delivery = input.fulfillment !== "PICKUP";
-      return tx.order.create({
+      const created = await tx.order.create({
         data: {
           tenantId,
           number: counter.nextOrderNumber - 1,
@@ -264,6 +272,7 @@ export async function createWebOrder(tenantId: string, input: CreateWebOrderInpu
           notes: input.notes,
           reservedUntil,
           termsAcceptedAt: new Date(),
+          isCredit: Boolean(credit),
           items: {
             create: q.priced.map((p, i) => ({
               productId: p.variant!.product.id,
@@ -287,8 +296,13 @@ export async function createWebOrder(tenantId: string, input: CreateWebOrderInpu
             },
           },
         },
-        select: { trackingToken: true, number: true },
+        select: { id: true, trackingToken: true, number: true },
       });
+      if (credit && input.credit) {
+        await createCreditPlan(tx, { tenantId, orderId: created.id, customerId: input.credit.customerId, totalCents: t.totalCents, level: credit.level, now: new Date() });
+        await tx.orderEvent.create({ data: { orderId: created.id, note: `Compra a crédito Credi-SF (${credit.plan.installments.length} cuotas quincenales). Inicial: $${(credit.plan.downCents / 100).toFixed(2)}` } });
+      }
+      return { trackingToken: created.trackingToken, number: created.number };
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
@@ -330,7 +344,8 @@ async function igtfForPayment(tx: Tx, orderId: string, currency: Currency, amoun
     select: { totalUsd: true, payments: { where: { status: { in: ["CONFIRMED", "PENDING_REVIEW"] } }, select: { amountUsd: true, igtfAmount: true, currency: true } } },
   });
   const credited = order.payments.reduce((a, p) => a + toCents(p.amountUsd) - (p.currency === "VES" ? 0 : toCents(p.igtfAmount)), 0);
-  const split = splitIgtf(amountCents, toCents(order.totalUsd) - credited, igtfRateBp);
+  const fees = (await creditOwed(tx, orderId))?.feesCents ?? 0;
+  const split = splitIgtf(amountCents, toCents(order.totalUsd) + fees - credited, igtfRateBp);
   return { igtf: split.igtf, base: split.covered };
 }
 
@@ -347,9 +362,11 @@ export async function reportPayment(tenantId: string, trackingToken: string, p: 
   const [rates, settings] = await Promise.all([rateForPayment(tenantId), getDeliverySettings(tenantId)]);
   const amounts = paymentAmounts(p.currency, p.amountCents, rates);
   return tdb.$transaction(async (tx) => {
-    const order = await tx.order.findFirst({ where: { trackingToken }, select: { id: true, status: true } });
+    const order = await tx.order.findFirst({ where: { trackingToken }, select: { id: true, status: true, creditPlan: { select: { status: true } } } });
     if (!order) throw new OrderError("Pedido no encontrado.");
-    if (!UNPAID_STATUSES.includes(order.status)) throw new OrderError("Este pedido ya no espera pagos.");
+    // A crédito se siguen reportando las cuotas después de la inicial.
+    const payingInstallments = order.creditPlan?.status === "ACTIVE" && order.status !== "CANCELLED";
+    if (!UNPAID_STATUSES.includes(order.status) && !payingInstallments) throw new OrderError("Este pedido ya no espera pagos.");
     await checkAccount(tx, p.financialAccountId, p.currency);
     const igtf = await igtfForPayment(tx, order.id, p.currency, p.amountCents, settings.igtfRateBp);
     const payment = await tx.payment.create({
@@ -375,10 +392,14 @@ export async function reportPayment(tenantId: string, trackingToken: string, p: 
       },
       select: { id: true },
     });
-    await tx.order.update({ where: { id: order.id }, data: { status: "PAYMENT_REVIEW" } });
-    await tx.orderEvent.create({
-      data: { orderId: order.id, fromStatus: order.status, toStatus: "PAYMENT_REVIEW", note: `La clienta reportó un pago${p.reference ? ` (ref. ${p.reference})` : ""}` },
-    });
+    if (UNPAID_STATUSES.includes(order.status)) {
+      await tx.order.update({ where: { id: order.id }, data: { status: "PAYMENT_REVIEW" } });
+      await tx.orderEvent.create({
+        data: { orderId: order.id, fromStatus: order.status, toStatus: "PAYMENT_REVIEW", note: `La clienta reportó un pago${p.reference ? ` (ref. ${p.reference})` : ""}` },
+      });
+    } else {
+      await tx.orderEvent.create({ data: { orderId: order.id, note: `La clienta reportó el pago de una cuota${p.reference ? ` (ref. ${p.reference})` : ""}` } });
+    }
     return payment;
   });
 }
@@ -412,13 +433,16 @@ async function settle(tx: Tx, tenantId: string, orderId: string, actor: Actor) {
   const paid = order.payments.reduce((a, p) => a + toCents(p.amountUsd) - igtfOf(p), 0);
   const igtfUsd = order.payments.reduce((a, p) => a + igtfOf(p), 0);
   const igtfBaseUsd = order.payments.reduce((a, p) => a + (p.currency === "VES" ? 0 : toCents(p.igtfBase)), 0);
-  const total = toCents(order.totalUsd);
+  // A crédito: con la inicial se entrega (y se descuenta el stock); se debe el total más los recargos por mora.
+  const credit = await creditOwed(tx, orderId);
+  const total = toCents(order.totalUsd) + (credit?.feesCents ?? 0);
+  const releases = isFullyPaid(credit ? credit.downCents : total, paid);
   const full = isFullyPaid(total, paid);
   const wasUnpaid = UNPAID_STATUSES.includes(order.status);
   const pending = await tx.payment.count({ where: { orderId, status: "PENDING_REVIEW" } });
 
   let status: OrderStatus = order.status;
-  if (wasUnpaid) status = full ? "PAID" : pending ? "PAYMENT_REVIEW" : "PENDING";
+  if (wasUnpaid) status = releases ? "PAID" : pending ? "PAYMENT_REVIEW" : "PENDING";
   await tx.order.update({
     where: { id: orderId },
     data: {
@@ -427,19 +451,20 @@ async function settle(tx: Tx, tenantId: string, orderId: string, actor: Actor) {
       igtfBaseUsd: money(igtfBaseUsd),
       paymentStatus: paid <= 0 ? "UNPAID" : full ? "PAID" : "PARTIAL",
       status,
-      ...(wasUnpaid && full ? { paidAt: new Date(), reservedUntil: null } : {}),
+      ...(wasUnpaid && releases ? { paidAt: new Date(), reservedUntil: null } : {}),
     },
   });
-  if (wasUnpaid && full) {
+  if (wasUnpaid && releases) {
     await commitStock(tx, tenantId, orderId, actor);
     await refreshCustomerStats(tx, order.customerId);
   }
+  const plan = credit ? await syncCreditPlan(tx, tenantId, orderId, paid) : null;
   if (status !== order.status) {
     await tx.orderEvent.create({
-      data: { orderId, fromStatus: order.status, toStatus: status, userId: actor?.id ?? null, userName: actor?.name ?? null, note: full ? "Pago completo: se descontó el stock" : null },
+      data: { orderId, fromStatus: order.status, toStatus: status, userId: actor?.id ?? null, userName: actor?.name ?? null, note: full ? "Pago completo: se descontó el stock" : releases ? "Inicial pagada: se descontó el stock" : null },
     });
   }
-  return { full, paidCents: paid, totalCents: total };
+  return { full, releases, credit: Boolean(credit), plan, paidCents: paid, totalCents: total };
 }
 
 /** El personal confirma (o rechaza) un pago reportado. */
@@ -560,6 +585,7 @@ export async function cancelOrder(tenantId: string, orderId: string, reason: str
     if (UNPAID_STATUSES.includes(order.status)) await releaseReservation(tx, tenantId, orderId);
     else await returnStock(tx, tenantId, orderId, actor);
     await tx.payment.updateMany({ where: { orderId, status: "PENDING_REVIEW" }, data: { status: "REJECTED", reviewNote: "Pedido anulado" } });
+    await tx.creditPlan.updateMany({ where: { orderId }, data: { status: "CANCELLED" } });
     await tx.orderEvent.create({
       data: { orderId, fromStatus: order.status, toStatus: "CANCELLED", userId: actor?.id ?? null, userName: actor?.name ?? null, note: reason },
     });
