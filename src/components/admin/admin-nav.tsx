@@ -19,6 +19,7 @@ const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerO
   { href: "/admin/cuentas", label: "Cuentas de cobro", icon: "🏦", ownerOnly: true },
   { href: "/admin/entregas", label: "Envíos y entregas", icon: "🚚", ownerOnly: true },
   { href: "/admin/apariencia", label: "Apariencia", icon: "🎨", ownerOnly: true },
+  { href: "/admin/ayuda", label: "Ayuda y guion de prueba", icon: "❓" },
 ];
 
 export function AdminNav({ owner, content, manager }: { owner: boolean; content: boolean; manager: boolean }) {
