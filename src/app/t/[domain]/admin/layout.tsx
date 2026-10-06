@@ -3,6 +3,7 @@ import { getTenant } from "@/server/tenant";
 import { isTenantAdmin, requireAdmin } from "@/server/auth/guards";
 import { logout } from "@/server/actions/auth";
 import { AdminNav } from "@/components/admin/admin-nav";
+import { getModules } from "@/server/queries/modules";
 import { TenantLogo } from "@/components/tenant-logo";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -27,7 +28,7 @@ export default async function AdminLayout({ children, params }: LayoutProps<"/t/
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Administración</p>
           </div>
         </Link>
-        <AdminNav owner={isTenantAdmin(ctx)} content={isTenantAdmin(ctx) || ctx.roles.includes("EDITOR")} manager={isTenantAdmin(ctx) || ctx.roles.includes("BRANCH_ADMIN")} />
+        <AdminNav owner={isTenantAdmin(ctx)} content={isTenantAdmin(ctx) || ctx.roles.includes("EDITOR")} manager={isTenantAdmin(ctx) || ctx.roles.includes("BRANCH_ADMIN")} modules={await getModules(tenant.id)} />
         <div className="hidden shrink-0 border-t border-line px-5 py-4 lg:block">
           <p className="truncate text-sm font-semibold">{ctx.user.name ?? ctx.user.email}</p>
           <p className="text-xs text-muted">{ctx.roles.map((r) => ROLE_LABEL[r] ?? r).join(", ")}</p>

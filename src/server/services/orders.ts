@@ -8,6 +8,7 @@ import { paymentAmounts } from "@/lib/payments";
 import { favoriteMethod } from "@/lib/crm";
 import { isFullyPaid, nextStatus, priceOrder, shippingFor, UNPAID_STATUSES, type Fulfillment } from "@/lib/orders";
 import { createCreditPlan, creditOwed, quoteCredit, syncCreditPlan } from "@/server/services/credit";
+import { sendPushToCustomer } from "@/server/services/push";
 
 type Tx = Parameters<Parameters<TenantDb["$transaction"]>[0]>[0];
 const money = centsToDecimalString;
@@ -362,10 +363,11 @@ export async function reportPayment(tenantId: string, trackingToken: string, p: 
   const [rates, settings] = await Promise.all([rateForPayment(tenantId), getDeliverySettings(tenantId)]);
   const amounts = paymentAmounts(p.currency, p.amountCents, rates);
   return tdb.$transaction(async (tx) => {
-    const order = await tx.order.findFirst({ where: { trackingToken }, select: { id: true, status: true, creditPlan: { select: { status: true } } } });
+    const order = await tx.order.findFirst({ where: { trackingToken }, select: { id: true, status: true, isImport: true, paymentStatus: true, creditPlan: { select: { status: true } } } });
     if (!order) throw new OrderError("Pedido no encontrado.");
-    // A crédito se siguen reportando las cuotas después de la inicial.
-    const payingInstallments = order.creditPlan?.status === "ACTIVE" && order.status !== "CANCELLED";
+    // A crédito se siguen reportando las cuotas después de la inicial; en una importación, el saldo después del adelanto.
+    const payingInstallments =
+      (order.creditPlan?.status === "ACTIVE" && order.status !== "CANCELLED") || (order.isImport && order.paymentStatus !== "PAID" && order.status !== "CANCELLED" && order.status !== "DELIVERED");
     if (!UNPAID_STATUSES.includes(order.status) && !payingInstallments) throw new OrderError("Este pedido ya no espera pagos.");
     await checkAccount(tx, p.financialAccountId, p.currency);
     const igtf = await igtfForPayment(tx, order.id, p.currency, p.amountCents, settings.igtfRateBp);
@@ -398,7 +400,7 @@ export async function reportPayment(tenantId: string, trackingToken: string, p: 
         data: { orderId: order.id, fromStatus: order.status, toStatus: "PAYMENT_REVIEW", note: `La clienta reportó un pago${p.reference ? ` (ref. ${p.reference})` : ""}` },
       });
     } else {
-      await tx.orderEvent.create({ data: { orderId: order.id, note: `La clienta reportó el pago de una cuota${p.reference ? ` (ref. ${p.reference})` : ""}` } });
+      await tx.orderEvent.create({ data: { orderId: order.id, note: `La clienta reportó el pago de ${order.isImport ? "un saldo" : "una cuota"}${p.reference ? ` (ref. ${p.reference})` : ""}` } });
     }
     return payment;
   });
@@ -425,6 +427,8 @@ async function settle(tx: Tx, tenantId: string, orderId: string, actor: Actor) {
       status: true,
       totalUsd: true,
       customerId: true,
+      isImport: true,
+      importDepositUsd: true,
       payments: { where: { status: "CONFIRMED" }, select: { amountUsd: true, currency: true, igtfAmount: true, igtfBase: true } },
     },
   });
@@ -436,7 +440,9 @@ async function settle(tx: Tx, tenantId: string, orderId: string, actor: Actor) {
   // A crédito: con la inicial se entrega (y se descuenta el stock); se debe el total más los recargos por mora.
   const credit = await creditOwed(tx, orderId);
   const total = toCents(order.totalUsd) + (credit?.feesCents ?? 0);
-  const releases = isFullyPaid(credit ? credit.downCents : total, paid);
+  // Importación: con el adelanto se procesa el encargo; el saldo se paga al llegar.
+  const deposit = order.isImport && order.importDepositUsd ? toCents(order.importDepositUsd) : null;
+  const releases = isFullyPaid(credit ? credit.downCents : deposit ?? total, paid);
   const full = isFullyPaid(total, paid);
   const wasUnpaid = UNPAID_STATUSES.includes(order.status);
   const pending = await tx.payment.count({ where: { orderId, status: "PENDING_REVIEW" } });
@@ -461,7 +467,7 @@ async function settle(tx: Tx, tenantId: string, orderId: string, actor: Actor) {
   const plan = credit ? await syncCreditPlan(tx, tenantId, orderId, paid) : null;
   if (status !== order.status) {
     await tx.orderEvent.create({
-      data: { orderId, fromStatus: order.status, toStatus: status, userId: actor?.id ?? null, userName: actor?.name ?? null, note: full ? "Pago completo: se descontó el stock" : releases ? "Inicial pagada: se descontó el stock" : null },
+      data: { orderId, fromStatus: order.status, toStatus: status, userId: actor?.id ?? null, userName: actor?.name ?? null, note: deposit !== null ? (full ? "Encargo pagado completo" : releases ? "Adelanto pagado: se procesa el encargo" : null) : full ? "Pago completo: se descontó el stock" : releases ? "Inicial pagada: se descontó el stock" : null },
     });
   }
   return { full, releases, credit: Boolean(credit), plan, paidCents: paid, totalCents: total };
@@ -541,10 +547,11 @@ export async function registerPayment(tenantId: string, orderId: string, p: Paym
 /** Avanza al siguiente paso (Preparando → Listo/Enviado → Entregado). */
 export async function advanceOrder(tenantId: string, orderId: string, to: OrderStatus, shipping: { carrier: string | null; trackingNumber: string | null }, actor: Actor) {
   const tdb = tenantDb(tenantId);
-  return tdb.$transaction(async (tx) => {
-    const order = await tx.order.findFirst({ where: { id: orderId }, select: { status: true, fulfillment: true, carrier: true } });
+  const order = await tdb.$transaction(async (tx) => {
+    const order = await tx.order.findFirst({ where: { id: orderId }, select: { status: true, fulfillment: true, carrier: true, isImport: true, paymentStatus: true, customerId: true, trackingToken: true, number: true } });
     if (!order) throw new OrderError("Pedido no encontrado.");
     if (nextStatus(order.status, order.fulfillment) !== to) throw new OrderError("El pedido cambió. Recarga la página.");
+    if (order.isImport && to === "DELIVERED" && order.paymentStatus !== "PAID") throw new OrderError("Falta el saldo del encargo: confirma el pago antes de entregarlo.");
     const claimed = await tx.order.updateMany({
       where: { id: orderId, status: order.status },
       data: {
@@ -564,7 +571,16 @@ export async function advanceOrder(tenantId: string, orderId: string, to: OrderS
         note: to === "SHIPPED" && shipping.trackingNumber ? `Guía ${shipping.carrier ?? ""} ${shipping.trackingNumber}`.trim() : null,
       },
     });
+    return order;
   });
+  // Encargo de importación: se avisa a la clienta cuando llega a la tienda.
+  if (order.isImport && to === "READY" && order.customerId) {
+    await sendPushToCustomer(tenantId, order.customerId, {
+      title: "📦 ¡Llegó tu encargo!",
+      body: order.paymentStatus === "PAID" ? `Tu pedido #${order.number} está listo para retirar.` : `Tu pedido #${order.number} llegó. Paga el saldo para retirarlo.`,
+      url: `/pedido/${order.trackingToken}`,
+    }).catch(() => 0);
+  }
 }
 
 /**

@@ -139,10 +139,10 @@ export function PushToggle({ publicKey }: { publicKey: string | null }) {
 
   return (
     <div className="rounded-2xl bg-store-soft p-4 text-sm">
-      <p className="font-semibold">🔔 Avisos de tus cuotas</p>
+      <p className="font-semibold">🔔 Avisos en este teléfono</p>
       {state === "on" ? (
         <>
-          <p className="mt-1 text-store-muted">Activados en este teléfono: te avisamos 2 días antes, el día del pago, si te atrasas y cuando recibimos tu pago.</p>
+          <p className="mt-1 text-store-muted">Activados: te avisamos de tus cuotas, tus pagos y tus encargos (cotización lista, llegada).</p>
           <button type="button" disabled={busy} onClick={disable} className="mt-2 text-sm font-semibold text-store-muted underline">
             Desactivar
           </button>

@@ -134,10 +134,12 @@ async function main() {
   // Limpia los datos de demo para poder volver a correr el seed (primero las notas, luego las facturas: se protegen entre sí)
   await db.invoice.deleteMany({ where: { tenantId, relatedInvoiceId: { not: null } } });
   await db.invoice.deleteMany({ where: { tenantId } });
+  await db.importRequest.deleteMany({ where: { tenantId } });
+  await db.importBatch.deleteMany({ where: { tenantId } });
   await db.order.deleteMany({ where: { tenantId } });
   await db.pushSubscription.deleteMany({ where: { tenantId } });
   await db.cashSession.deleteMany({ where: { tenantId } });
-  await db.tenantAsset.deleteMany({ where: { tenantId, OR: ["comprobante-", "producto-", "banner-", "portada-", "blog-", "credito-"].map((p) => ({ kind: { startsWith: p } })) } });
+  await db.tenantAsset.deleteMany({ where: { tenantId, OR: ["comprobante-", "producto-", "banner-", "portada-", "blog-", "credito-", "encargo-", "importacion-"].map((p) => ({ kind: { startsWith: p } })) } });
   await db.blogPost.deleteMany({ where: { tenantId } });
   await db.product.deleteMany({ where: { tenantId } });
   await db.category.deleteMany({ where: { tenantId } });
@@ -347,6 +349,21 @@ async function main() {
   if (!(await db.cashRegister.count({ where: { tenantId } }))) {
     await db.cashRegister.create({ data: { tenantId, branchId: branch.id, name: "Caja principal" } });
   }
+
+  // Importaciones: un lote abierto de ejemplo (el módulo se enciende en Módulos).
+  const today = new Date();
+  await db.importBatch.create({
+    data: {
+      tenantId,
+      name: "Lote de temporada",
+      slug: "lote-de-temporada",
+      description: "Encargos de SHEIN, Alibaba y más. Llegan todos juntos a la tienda.",
+      status: "OPEN",
+      opensAt: new Date(today.getTime() - 86_400_000),
+      closesAt: new Date(today.getTime() + 20 * 86_400_000),
+      estimatedArrival: new Date(today.getTime() + 45 * 86_400_000),
+    },
+  });
 
   const counts = {
     productos: await db.product.count({ where: { tenantId } }),

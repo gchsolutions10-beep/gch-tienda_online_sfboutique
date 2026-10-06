@@ -3,6 +3,8 @@ import { getTenant } from "@/server/tenant";
 import { tenantDb } from "@/server/db";
 import { contractFor, guarantorLabel } from "@/server/queries/credit";
 import { GuarantorAcceptForm } from "@/components/store/account-forms";
+import { ModuleOff } from "@/components/store/module-off";
+import { getModules } from "@/server/queries/modules";
 import { formatVeId } from "@/lib/ve-ids";
 
 export const metadata = { title: "Aceptación del fiador", robots: { index: false } };
@@ -11,6 +13,7 @@ export const metadata = { title: "Aceptación del fiador", robots: { index: fals
 export default async function GuarantorPage({ params }: PageProps<"/t/[domain]/credito/fiador/[token]">) {
   const { domain, token } = await params;
   const tenant = await getTenant(domain);
+  if (!(await getModules(tenant.id)).credit) return <ModuleOff title="Credi-SF" />;
   const app = await tenantDb(tenant.id).creditApplication.findFirst({
     where: { guarantorToken: token },
     select: { status: true, fullName: true, idType: true, idNumber: true, guarantorName: true, guarantorIdType: true, guarantorIdNumber: true, guarantorAcceptedAt: true },

@@ -231,6 +231,29 @@ enum CreditPlanStatus {
   CANCELLED
 }
 
+/// Lote o temporada de importación por encargo
+enum ImportBatchStatus {
+  /// Borrador: todavía no se ve en la tienda
+  DRAFT
+  /// Recibiendo pedidos
+  OPEN
+  /// Comprado / en tránsito
+  IN_PROCESS
+  /// Entregado: pasa al historial
+  DELIVERED
+  CANCELLED
+}
+
+enum ImportRequestStatus {
+  PENDING_REVIEW
+  REJECTED
+  /// La tienda envió la cotización: espera que la clienta la acepte
+  QUOTED
+  /// Aceptada: se creó el pedido para pagar el adelanto
+  ACCEPTED
+  CANCELLED
+}
+
 enum PostStatus {
   DRAFT
   SCHEDULED
@@ -363,6 +386,13 @@ model TenantSettings {
   creditVipAfter     Int     @default(6)
   /// Un solo crédito abierto a la vez
   creditOneOpen      Boolean @default(true)
+
+  // ── Importaciones por encargo ──
+  importsEnabled      Boolean @default(false)
+  /// Adelanto para procesar el encargo (% del total cotizado)
+  importDepositPct    Int     @default(50)
+  /// Comisión sugerida en el cotizador (% sobre producto + flete)
+  importCommissionPct Int     @default(15)
 
   // ── CRM: segmentación automática ──
   vipMinSpentUsd     Decimal @default(500) @db.Decimal(12, 2)
@@ -747,15 +777,17 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  tenant       Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  addresses    CustomerAddress[]
-  tags         CustomerTagOnCustomer[]
-  interactions CustomerInteraction[]
-  orders       Order[]
-  sessions     CustomerSession[]
-  creditApps   CreditApplication[]
-  creditPlans  CreditPlan[]
-  pushSubs     PushSubscription[]
+  tenant         Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  addresses      CustomerAddress[]
+  tags           CustomerTagOnCustomer[]
+  interactions   CustomerInteraction[]
+  orders         Order[]
+  sessions       CustomerSession[]
+  creditApps     CreditApplication[]
+  creditPlans    CreditPlan[]
+  pushSubs       PushSubscription[]
+  importRequests ImportRequest[]
+  importReviews  ImportReview[]
 
   @@unique([tenantId, phone])
   @@index([tenantId, idNumber])
@@ -915,15 +947,18 @@ model Order {
   totalVes    Decimal @db.Decimal(18, 2)
   paidUsd     Decimal @default(0) @db.Decimal(12, 2)
 
-  notes           String?
-  internalNote    String?
-  createdById     String?
-  cashSessionId   String?
+  notes            String?
+  internalNote     String?
+  createdById      String?
+  cashSessionId    String?
   /// Hasta cuándo se aparta el stock si no paga
-  reservedUntil   DateTime?
-  termsAcceptedAt DateTime?
+  reservedUntil    DateTime?
+  termsAcceptedAt  DateTime?
   /// Compra a crédito (Credi-SF): ver CreditPlan
-  isCredit        Boolean   @default(false)
+  isCredit         Boolean   @default(false)
+  /// Encargo de importación: con el adelanto (importDepositUsd) se procesa
+  isImport         Boolean   @default(false)
+  importDepositUsd Decimal?  @db.Decimal(12, 2)
 
   paidAt       DateTime?
   shippedAt    DateTime?
@@ -933,17 +968,18 @@ model Order {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  tenant      Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  branch      Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  customer    Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  createdBy   User?           @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  cashSession CashSession?    @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
-  items       OrderItem[]
-  payments    Payment[]
-  invoices    Invoice[]
-  movements   StockMovement[]
-  events      OrderEvent[]
-  creditPlan  CreditPlan?
+  tenant        Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  branch        Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer      Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  createdBy     User?           @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  cashSession   CashSession?    @relation(fields: [cashSessionId], references: [id], onDelete: SetNull)
+  items         OrderItem[]
+  payments      Payment[]
+  invoices      Invoice[]
+  movements     StockMovement[]
+  events        OrderEvent[]
+  creditPlan    CreditPlan?
+  importRequest ImportRequest?
 
   @@unique([tenantId, number])
   @@index([tenantId, status, createdAt])
@@ -1446,4 +1482,124 @@ model PushSubscription {
 
   @@index([tenantId, customerId])
   @@map("push_subscriptions")
+}
+
+// ───────────────────────────── Importaciones por encargo ─────────────────────────────
+
+model ImportBatch {
+  id               String            @id @default(cuid())
+  tenantId         String
+  name             String
+  slug             String
+  description      String?
+  opensAt          DateTime
+  /// Último día para encargar
+  closesAt         DateTime
+  estimatedArrival DateTime?
+  status           ImportBatchStatus @default(DRAFT)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  products ImportProduct[]
+  requests ImportRequest[]
+  reviews  ImportReview[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status])
+  @@map("import_batches")
+}
+
+/// Producto publicado en un lote para que otras clientas se sumen
+model ImportProduct {
+  id                String   @id @default(cuid())
+  tenantId          String
+  batchId           String
+  title             String
+  description       String?
+  /// SHEIN, Alibaba, Temu… (el enlace exacto solo lo ve el personal)
+  sourceStore       String
+  sourceUrl         String
+  imageUrl          String?
+  /// Precio estimado por unidad (sujeto a cotización final)
+  estimatedPriceUsd Decimal? @db.Decimal(12, 2)
+  sizes             String?
+  colors            String?
+  isPublished       Boolean  @default(true)
+  sortOrder         Int      @default(0)
+  createdAt         DateTime @default(now())
+
+  batch    ImportBatch     @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  requests ImportRequest[]
+
+  @@index([tenantId, batchId, isPublished])
+  @@map("import_products")
+}
+
+/// Solicitud de encargo de una clienta (enlace propio o «Unirme al pedido»)
+model ImportRequest {
+  id              String              @id @default(cuid())
+  tenantId        String
+  customerId      String
+  batchId         String?
+  productId       String?
+  status          ImportRequestStatus @default(PENDING_REVIEW)
+  sourceUrl       String
+  sourceStore     String
+  title           String?
+  /// Foto que subió la clienta (privada: TenantAsset «encargo-<id>»)
+  photoKey        String?
+  size            String?
+  color           String?
+  quantity        Int                 @default(1)
+  notes           String?
+  /// Producto privado/discreto: nunca se publica en la galería
+  isPrivate       Boolean             @default(false)
+  termsAcceptedAt DateTime
+
+  // Cotización (USD)
+  unitCostUsd   Decimal?  @db.Decimal(12, 2)
+  freightUsd    Decimal?  @db.Decimal(12, 2)
+  commissionUsd Decimal?  @db.Decimal(12, 2)
+  totalUsd      Decimal?  @db.Decimal(12, 2)
+  depositUsd    Decimal?  @db.Decimal(12, 2)
+  quoteNote     String?
+  quotedAt      DateTime?
+  quotedByName  String?
+  rejectReason  String?
+  adminNote     String?
+
+  /// Pedido creado al aceptar la cotización (pagos, estados y factura)
+  orderId    String?   @unique
+  acceptedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  customer Customer       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  batch    ImportBatch?   @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  product  ImportProduct? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  order    Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+  @@index([customerId])
+  @@index([productId])
+  @@map("import_requests")
+}
+
+/// Reseña verificada de un lote entregado (la modera la tienda)
+model ImportReview {
+  id         String   @id @default(cuid())
+  tenantId   String
+  batchId    String
+  customerId String
+  rating     Int
+  body       String
+  isApproved Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  batch    ImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  customer Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, customerId])
+  @@index([tenantId, isApproved])
+  @@map("import_reviews")
 }

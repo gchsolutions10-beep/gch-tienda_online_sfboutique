@@ -11,13 +11,13 @@ Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSo
 - Trabaja **por fases**; dentro de una fase puedes avanzar solo. Al terminar: pruebas, tipos, lint y build en verde,
   commit en una rama `fase-N-…`, unir a `main` cuando lo pida, y explicar qué se hizo y qué falta.
 
-## Estado (5 de octubre de 2026)
-- Fases 1–6 listas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago, pedidos,
+## Estado (6 de octubre de 2026)
+- Fases 1–7 listas: catálogo con variantes talla × color, checkout con reserva de stock y reporte de pago, pedidos,
   productos/stock, envíos, cuentas de cobro, caja multimoneda con cierre, CRM, **facturación venezolana con IGTF**
   (facturas, notas de crédito/débito, número de control, libro de ventas), **editor del blog, portada y banners**, y
   **reportes de gestión** (ventas, márgenes, BCV vs P2P, inventario) con **dominio propio**, y **Credi-SF** (crédito con
-  fiador, niveles, cobranza y mora) con cuentas de clientas, **PWA instalable y avisos push**. Detalle en
-  `docs/ARQUITECTURA.md` (secciones 5c, 5d y 5e).
+  fiador, niveles, cobranza y mora) con cuentas de clientas, **PWA instalable y avisos push**, y **módulos encendibles** con **Importaciones por encargo** (lotes, cotizador con
+  adelanto, galería grupal, reseñas). Detalle en `docs/ARQUITECTURA.md` (secciones 5c a 5f).
 - Credi-SF necesita en Vercel `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` y `CRON_SECRET`
   (guía en `docs/DESPLIEGUE.md` §7). El contrato y el recargo por mora: «validar con un abogado».
 - Siguiente: lo que pida el usuario tras mostrar la demo (p. ej. imprenta digital conectada, nota de entrega).
@@ -58,3 +58,6 @@ Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSo
 - Dentro de `$transaction` no consultes con `tenantDb()`/`db` (otra conexión): pasa el `tx` (ej. `getCreditSettings(id, tx)`);
   con una sola conexión la transacción se traba hasta el timeout.
 - Archivos `"use server"` solo pueden exportar funciones async (ni constantes ni tipos de valor).
+- La base local de `prisma dev` (pglite) acepta mal varias conexiones a la vez: si `next start` da «Server has closed the
+  connection», no corras `tsx` contra la base con el servidor encendido; si persiste, `npx prisma dev stop moda`,
+  `npx prisma dev rm moda`, vuelve a crearla, `migrate deploy` y seed. En Neon no pasa.

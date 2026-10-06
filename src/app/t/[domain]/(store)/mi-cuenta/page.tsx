@@ -10,6 +10,9 @@ import { asLevel, CREDIT_LEVELS } from "@/lib/credit";
 import { formatUsd, toCents } from "@/lib/money";
 import { publicOrigin, safeNextPath } from "@/lib/hosts";
 import { cn } from "@/components/ui/styles";
+import { getModules } from "@/server/queries/modules";
+import { ModuleOff } from "@/components/store/module-off";
+import { MyImportRequests } from "@/components/store/my-import-requests";
 import { formatVePhone } from "@/lib/ve-ids";
 
 export const metadata = { title: "Mi cuenta", robots: { index: false } };
@@ -19,15 +22,17 @@ const card = "rounded-3xl bg-store-card p-5 shadow-sm sm:p-6";
 export default async function AccountPage({ params, searchParams }: PageProps<"/t/[domain]/mi-cuenta">) {
   const { domain } = await params;
   const tenant = await getTenant(domain);
-  const me = await getCurrentCustomer(tenant.id);
+  const [me, modules] = await Promise.all([getCurrentCustomer(tenant.id), getModules(tenant.id)]);
   const next = safeNextPath((await searchParams).next, "/mi-cuenta");
+  if (!modules.credit && !modules.imports) return <ModuleOff title="Mi cuenta" />;
+  const purpose = [modules.credit && "comprar a crédito con Credi-SF", modules.imports && "encargar productos de SHEIN, Alibaba y otras tiendas"].filter(Boolean).join(" y ");
 
   if (!me) {
     return (
       <div className="mx-auto max-w-lg px-4 py-10">
         <h1 className="font-display text-4xl font-semibold">Mi cuenta</h1>
         <p className="mb-6 mt-1 text-sm text-store-muted">
-          La cuenta es para comprar a crédito con <b>Credi-SF</b>, ver tus cuotas y recibir avisos. Para comprar de contado no la necesitas.
+          La cuenta es para {purpose}, y recibir avisos. Para comprar de contado no la necesitas.
         </p>
         <AuthForms next={next} />
       </div>
@@ -49,6 +54,7 @@ export default async function AccountPage({ params, searchParams }: PageProps<"/
         <LogoutButton />
       </div>
 
+      {modules.credit ? (
       <section className={card}>
         <h2 className="font-display text-2xl font-semibold">Credi-SF</h2>
         {me.creditStatus === "APPROVED" ? (
@@ -85,6 +91,9 @@ export default async function AccountPage({ params, searchParams }: PageProps<"/
           </div>
         )}
       </section>
+      ) : null}
+
+      {modules.imports ? <MyImportRequests tenantId={tenant.id} customerId={me.id} /> : null}
 
       {plans.length ? (
         <section className={card}>

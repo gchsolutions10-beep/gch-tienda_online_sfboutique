@@ -4,6 +4,7 @@ import { getCurrentCustomer } from "@/server/auth/customer-session";
 import { getCreditSettings } from "@/server/services/credit";
 import { contractFor } from "@/server/queries/credit";
 import { Contract } from "@/components/store/account-forms";
+import { ModuleOff } from "@/components/store/module-off";
 import { CREDIT_LEVELS, type CreditLevel } from "@/lib/credit";
 import { formatUsd } from "@/lib/money";
 
@@ -15,14 +16,7 @@ export default async function CreditLandingPage({ params }: PageProps<"/t/[domai
   const contract = await contractFor(tenant, {});
   const cta = me ? (me.creditStatus === "APPROVED" ? "/catalogo" : me.creditStatus === "PENDING" ? "/mi-cuenta" : "/credito/solicitud") : "/mi-cuenta?next=/credito/solicitud";
 
-  if (!settings.enabled) {
-    return (
-      <div className="mx-auto max-w-xl px-4 py-16 text-center">
-        <h1 className="font-display text-4xl font-semibold">Credi-SF</h1>
-        <p className="mt-3 text-store-muted">La compra a crédito estará disponible muy pronto.</p>
-      </div>
-    );
-  }
+  if (!settings.enabled) return <ModuleOff title="Credi-SF" />;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10">

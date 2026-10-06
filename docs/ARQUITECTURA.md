@@ -140,6 +140,19 @@ El **IGTF** de los pagos en divisas se calcula desde la fase 4 (sección 5c).
 - **PWA**: manifest por negocio en `/manifest`, íconos con la marca en `/icono/<96|180|192|512>` (`?maskable=1`), `public/sw.js` (red primero en páginas públicas con aviso sin conexión; caché de `/_next/static` y `/marca`; nunca guarda panel, cuenta, checkout ni pedidos). Push estándar Web Push con VAPID (`web-push`; sin Firebase): `PushSubscription` por clienta; `sendPushToCustomer` borra las suscripciones vencidas (404/410). En iPhone los avisos requieren instalar la app (iOS 16.4+).
 - Pruebas: `tests/unit/credit.test.ts` y de punta a punta `npx tsx tests/integration/credito.ts` (base local).
 
+## 5f. Módulos e Importaciones por encargo (fase 7)
+
+- **Módulos** (`/admin/modulos`, solo la dueña): `TenantSettings.importsEnabled` y `creditEnabled` (`getModules` en `src/server/queries/modules.ts`). Apagado: se ocultan los enlaces de la cabecera, el pie, «Mi cuenta» y el pago; las páginas muestran `ModuleOff` («Sección no disponible») y las acciones del servidor lo rechazan. En el panel el menú marca «apagado» y la página muestra un aviso. Los datos no se borran. Las cuentas de clientas existen si hay al menos un módulo encendido.
+- **Cabecera**: los nombres nunca se parten (`whitespace-nowrap`); se muestran las categorías que caben según el ancho (2 en `lg`, 4 en `xl`, 6 en `2xl`) y el resto, el blog, Importaciones y Credi-SF van en «Más ▾».
+- **Lotes** (`ImportBatch`): DRAFT → OPEN (recibe pedidos entre `opensAt` y `closesAt`, días de Caracas) → IN_PROCESS (los pedidos con adelanto pasan a PREPARING) → DELIVERED (historial público y reseñas). También CANCELLED.
+- **Encargos** (`ImportRequest`): la clienta (con cuenta) pega el enlace (`parseProductLink`: http/https, reconoce SHEIN, AliExpress, Alibaba, 1688, Temu, Amazon, eBay, Walmart), foto opcional PRIVADA (`TenantAsset` `encargo-<id>`, servida en `/admin/importaciones/foto/<key>`), talla, color, cantidad, notas, **privado/discreto** y acepta el descargo (`IMPORT_DISCLAIMER`). PENDING_REVIEW → QUOTED → ACCEPTED, o REJECTED/CANCELLED.
+- **Cotización** (`quoteFor` en `src/lib/imports.ts`): productos + flete (reembolso de gastos, exentos) + comisión de la tienda (servicio, gravada con IVA según la configuración); adelanto = `importDepositPct` (50 %); comisión sugerida `importCommissionPct` (15 %) sobre productos + flete. VALIDAR CON EL CONTADOR el tratamiento fiscal.
+- **Aceptar** crea un `Order` normal (`isImport`, `importDepositUsd`, retiro en tienda, sin reserva que venza) con 2 renglones (encargo exento + servicio de gestión). Con el adelanto confirmado `settle` lo pasa a PAID (pago PARTIAL); se siguen aceptando pagos hasta completar el saldo; no se puede marcar DELIVERED sin el pago completo. Al pasar a READY se avisa por push («¡Llegó tu encargo!»).
+- **Galería grupal** (`ImportProduct`): la tienda publica un encargo no privado (copia la foto a la imagen pública `importacion-<id>`); otras clientas se suman con «Unirme al pedido» (crea su propio `ImportRequest` con `productId`) y se muestra el contador de personas distintas (`groupCount`). El enlace exacto solo lo ve el personal.
+- **Reseñas** (`ImportReview`): solo en lotes DELIVERED y solo clientas con un pedido entregado de ese lote; la tienda las aprueba antes de publicarlas.
+- Pantallas: tienda `/importaciones`, `/importaciones/encargar`, «Mis encargos» en `/mi-cuenta#encargos`; panel `/admin/importaciones` (bandeja, lotes, galería, reseñas, configuración) y `/admin/importaciones/<id>` (cotizador en vivo USD/Bs, rechazar, publicar, nota interna).
+- Pruebas: `tests/unit/imports.test.ts` y de punta a punta `npx tsx tests/integration/importaciones.ts` (base local).
+
 ## 6. Propuesta de componentes de interfaz
 
 | Componente | Estado | Qué hace |
@@ -178,3 +191,4 @@ El **IGTF** de los pagos en divisas se calcula desde la fase 4 (sección 5c).
 | 4 | Facturación venezolana (series, número de control, notas, libro de ventas, IGTF) + CMS del blog y banners | ✅ |
 | 5 | Reportes de gestión USD/Bs (ventas, márgenes, P2P vs BCV) y dominio propio | ✅ |
 | 6 | Credi-SF (crédito con fiador, niveles, cobranza y mora), cuentas de clientas, PWA instalable y avisos push | ✅ |
+| 7 | Módulos encendibles (Importaciones, Crédito), Importaciones por encargo (lotes, cotizador, galería grupal, reseñas) y cabecera sin cortes | ✅ |

@@ -2,7 +2,7 @@
  * Imágenes que sube el negocio (se guardan en TenantAsset y se sirven en
  * /marca/<kind>). Reglas compartidas por el navegador y el servidor.
  */
-export type MediaKind = "logo" | "banner" | "producto" | "categoria" | "portada" | "blog" | "comprobante";
+export type MediaKind = "logo" | "banner" | "producto" | "categoria" | "portada" | "blog" | "comprobante" | "importacion";
 
 /** Tamaño máximo en el navegador antes de subir (lado más largo) y peso máximo aceptado. */
 export const MEDIA_RULES: Record<MediaKind, { maxSide: number; maxBytes: number; label: string }> = {
@@ -14,6 +14,7 @@ export const MEDIA_RULES: Record<MediaKind, { maxSide: number; maxBytes: number;
   portada: { maxSide: 1400, maxBytes: 900_000, label: "imagen de portada" },
   blog: { maxSide: 1600, maxBytes: 1_000_000, label: "imagen del artículo" },
   comprobante: { maxSide: 1600, maxBytes: 1_500_000, label: "comprobante de pago" },
+  importacion: { maxSide: 1400, maxBytes: 900_000, label: "foto del producto" },
 };
 
 /** Clave del archivo: "logo" o "<tipo>-<id>". */
@@ -23,7 +24,7 @@ export function mediaKey(kind: MediaKind, id?: string) {
 
 /** Valida la clave que llega en la URL /marca/<clave>. */
 export function isMediaKey(key: string) {
-  return key === "logo" || /^(banner|producto|categoria|portada|blog)-[a-z0-9]{10,40}$/.test(key);
+  return key === "logo" || /^(banner|producto|categoria|portada|blog|importacion)-[a-z0-9]{10,40}$/.test(key);
 }
 
 /** URL pública con versión: cambia con cada imagen nueva, así se puede cachear para siempre. */

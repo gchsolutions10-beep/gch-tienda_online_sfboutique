@@ -5,25 +5,27 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/components/ui/styles";
 
 /** phase: módulo diseñado (tablas listas) que se construye en esa fase. */
-const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerOnly?: boolean; contentOnly?: boolean; managerOnly?: boolean }[] = [
+const ITEMS: { href: string; label: string; icon: string; phase?: number; ownerOnly?: boolean; contentOnly?: boolean; managerOnly?: boolean; module?: "credit" | "imports" }[] = [
   { href: "/admin", label: "Resumen", icon: "📊" },
   { href: "/admin/tasas", label: "Tasas BCV / P2P", icon: "💱" },
   { href: "/admin/pedidos", label: "Pedidos", icon: "🧾" },
   { href: "/admin/productos", label: "Productos y stock", icon: "👗" },
   { href: "/admin/caja", label: "Caja (venta en tienda)", icon: "💵" },
   { href: "/admin/clientes", label: "Clientes (CRM)", icon: "👥" },
-  { href: "/admin/credito", label: "Credi-SF (crédito)", icon: "🗓️", managerOnly: true },
+  { href: "/admin/credito", label: "Credi-SF (crédito)", icon: "🗓️", managerOnly: true, module: "credit" },
+  { href: "/admin/importaciones", label: "Importaciones", icon: "✈️", managerOnly: true, module: "imports" },
   { href: "/admin/facturacion", label: "Facturación", icon: "📑" },
   { href: "/admin/reportes", label: "Reportes", icon: "📈", managerOnly: true },
   { href: "/admin/blog", label: "Blog y lookbook", icon: "📝", contentOnly: true },
   { href: "/admin/portada", label: "Portada y banners", icon: "🖼️", contentOnly: true },
   { href: "/admin/cuentas", label: "Cuentas de cobro", icon: "🏦", ownerOnly: true },
   { href: "/admin/entregas", label: "Envíos y entregas", icon: "🚚", ownerOnly: true },
+  { href: "/admin/modulos", label: "Módulos", icon: "🧩", ownerOnly: true },
   { href: "/admin/apariencia", label: "Apariencia", icon: "🎨", ownerOnly: true },
   { href: "/admin/ayuda", label: "Ayuda y guion de prueba", icon: "❓" },
 ];
 
-export function AdminNav({ owner, content, manager }: { owner: boolean; content: boolean; manager: boolean }) {
+export function AdminNav({ owner, content, manager, modules }: { owner: boolean; content: boolean; manager: boolean; modules: { credit: boolean; imports: boolean } }) {
   const pathname = usePathname();
   const items = ITEMS.filter((i) => (owner || !i.ownerOnly) && (content || !i.contentOnly) && (manager || !i.managerOnly));
   const active = items.filter((i) => !i.phase && (pathname === i.href || pathname.startsWith(`${i.href}/`))).sort((a, b) => b.href.length - a.href.length)[0]?.href;
@@ -49,6 +51,7 @@ export function AdminNav({ owner, content, manager }: { owner: boolean; content:
           >
             <span aria-hidden>{item.icon}</span>
             {item.label}
+            {item.module && !modules[item.module] ? <span className="ml-auto rounded bg-cream px-1.5 text-[10px] font-semibold text-muted">apagado</span> : null}
           </Link>
         ),
       )}
