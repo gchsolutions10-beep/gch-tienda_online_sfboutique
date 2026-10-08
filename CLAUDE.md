@@ -38,8 +38,11 @@ Tienda online + gestión + CRM + blog para boutiques de moda en Venezuela (GchSo
 - **Nunca te conectes a Neon ni pidas sus cadenas de conexión.** El usuario corre: `npm run migrar:neon` (aplica
   migraciones), `npm run admin:neon` (clave/administradora), `npm run demo:neon` (recarga la demo: BORRA datos; solo para
   demos). Guía: `docs/DESPLIEGUE.md`.
-- **Si una fase trae migración nueva:** une a `main` en local, pide al usuario correr `npm run migrar:neon`, y solo
-  después haz `git push` (si no, la página en línea da error).
+- **Migraciones al publicar:** el `build` corre `scripts/migrar-en-vercel.mjs`, que en Vercel *Production* aplica
+  `prisma migrate deploy` con `DIRECT_DATABASE_URL` (cadena Direct de Neon; solo en Production). Si falla, la
+  publicación se detiene y sigue la versión anterior. Si la variable falta, solo avisa: entonces el usuario corre
+  `npm run migrar:neon` antes del `git push` (respaldo). Las migraciones deben ser aditivas/compatibles con la
+  versión anterior. Avisa al usuario cuando una fase traiga migración y revisa con él el registro de Vercel.
 - Vercel: variables `DATABASE_URL` (Neon pooled), `ROOT_DOMAIN=sfboutique.vercel.app`, `DEFAULT_TENANT_SLUG=sfboutique`.
   `vercel.json` fuerza el framework Next.js (Vercel lo había detectado como estático).
 - Local (en la computadora del usuario, Windows): `npm run db:local` (prisma dev en puertos fijos 51217–51219; si dice

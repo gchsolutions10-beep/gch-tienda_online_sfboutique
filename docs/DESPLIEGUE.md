@@ -81,6 +81,7 @@ npm run admin:neon
 | Variable | Valor | ¿Para qué? |
 |---|---|---|
 | `DATABASE_URL` | la cadena **Pooled** de Neon | Conexión a la base de datos |
+| `DIRECT_DATABASE_URL` | la cadena **Direct** de Neon (sin `-pooler`), **solo en *Production*** y como **Sensitive** | Aplicar las migraciones solas al publicar (§5) |
 | `ROOT_DOMAIN` | `gch-moda.vercel.app` (sin `https://`; la dirección que te dé Vercel) | Dirección de la plataforma |
 | `DEFAULT_TENANT_SLUG` | `sfboutique` | Negocio que se ve en la dirección principal |
 
@@ -111,14 +112,23 @@ para tu computadora.
 ## 5. Cada vez que haya cambios
 
 1. Yo trabajo en una rama y, cuando me dices «publícala», la uno a `main`.
-2. **Si el cambio trae una migración nueva** (carpeta nueva en `prisma/migrations`), **antes** de publicar corre:
+2. Vercel publica solo en 2–4 minutos. **Las migraciones se aplican solas**: antes de compilar, Vercel corre
+   `scripts/migrar-en-vercel.mjs`, que agrega a la base en línea lo que falta (no borra nada) usando
+   `DIRECT_DATABASE_URL`.
+   - Solo en **producción** (rama `main`); las vistas previas de otras ramas nunca tocan la base.
+   - Si la migración falla, la publicación se detiene y **sigue en línea la versión anterior**: la página no se cae.
+     El detalle sale en Vercel → **Deployments** → el despliegue fallido → **Build Logs** (busca `[migraciones]`).
+3. Si falta `DIRECT_DATABASE_URL`, el registro de Vercel lo avisa y no migra: en ese caso, el respaldo de siempre es
+   correr `npm run migrar:neon` desde tu computadora antes de publicar.
 
-   ```bash
-   npm run migrar:neon
-   ```
+### Poner `DIRECT_DATABASE_URL` (una sola vez)
 
-   Agrega a la base en línea solo lo que falta (no borra nada). Te aviso cada vez que haga falta.
-3. Haces `git push` (o me pides que lo haga). Vercel publica solo en 2–4 minutos.
+1. En [console.neon.tech](https://console.neon.tech) → tu proyecto → **Connect** → desactiva *Connection pooling* y
+   copia la cadena (**Direct**: el host **no** contiene `-pooler`).
+2. En Vercel → el proyecto → **Settings → Environment Variables** → **Add**: nombre `DIRECT_DATABASE_URL`, el valor
+   copiado, marca **solo *Production*** y **Sensitive**. Guarda.
+3. **Deployments** → en el último despliegue, **⋯ → Redeploy**. En **Build Logs** debe aparecer
+   `[migraciones] ✓ Base de datos al día.`
 
 ---
 
@@ -162,5 +172,6 @@ Si cambias las llaves, las clientas tienen que volver a activar los avisos.
 | «DATABASE_URL no está configurada» | Falta la variable en Vercel o no se marcó para *Production* |
 | Error de conexión al correr `demo:neon` o `migrar:neon` | Pegaste la cadena *Pooled* en vez de *Direct* |
 | La página dice que no encuentra el negocio | `DEFAULT_TENANT_SLUG` distinto de `sfboutique`, o falta el paso 2.1 |
-| Error 500 después de publicar cambios | Faltó `npm run migrar:neon` antes del `git push` |
+| Error 500 después de publicar cambios | Faltó `DIRECT_DATABASE_URL` en Vercel (el registro dice «⚠ Falta DIRECT_DATABASE_URL») y no se corrió `npm run migrar:neon` |
+| La publicación falla con «[migraciones] ✖» | La migración no pudo aplicarse; sigue en línea la versión anterior. Mándame el registro (Build Logs) |
 | El login funciona pero te saca al recargar | Abriste otra dirección (las sesiones son por dominio) |
