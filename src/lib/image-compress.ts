@@ -1,67 +1,94 @@
 import { LOGO_MAX_BYTES, PROOF_MAX_BYTES } from "@/lib/files";
 import { MEDIA_RULES, type MediaKind } from "@/lib/media";
 
+type Prepared = { ok: true; file: File } | { ok: false; error: string };
+
+/** Formatos que aceptamos de entrada (HEIC/HEIF: fotos de iPhone, si el navegador sabe abrirlas). */
+const IMAGE_IN = /^image\/(jpeg|png|webp|heic|heif)$/;
+const QUALITIES = [0.85, 0.75, 0.65, 0.55, 0.45];
+
+function draw(bitmap: ImageBitmap, maxSide: number, background: string | null) {
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas");
+  if (background) {
+    ctx.fillStyle = background; // JPEG no tiene transparencia
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+const toBlob = (canvas: HTMLCanvasElement, type: string, quality?: number) =>
+  new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+
+let webpSupport: Promise<boolean> | null = null;
+/** ¿El navegador sabe crear WebP? (Safari antes de la versión 17 no: devuelve PNG.) */
+function canMakeWebp() {
+  webpSupport ??= (async () => {
+    const c = document.createElement("canvas");
+    c.width = c.height = 1;
+    return (await toBlob(c, "image/webp", 0.8))?.type === "image/webp";
+  })();
+  return webpSupport;
+}
+
 /**
- * (Navegador) Reduce una captura de pantalla a JPEG de máx. 1600 px antes de
- * subirla: las capturas de las apps bancarias pesan 1–4 MB y quedan en
- * 150–400 KB sin perder legibilidad. Los PDF se suben tal cual.
+ * Reduce la imagen hasta que pese menos de `maxBytes`: baja la calidad y, si
+ * no alcanza, achica el tamaño. Usa WebP; si el navegador no sabe crearlo, JPEG
+ * (un PNG de una foto pesa 8–15 veces más), o PNG solo si hace falta la
+ * transparencia, como en el logo.
  */
-export async function prepareProofFile(file: File): Promise<{ ok: true; file: File } | { ok: false; error: string }> {
+async function shrink(bitmap: ImageBitmap, opts: { maxSide: number; maxBytes: number; keepAlpha: boolean; name: string }): Promise<File | null> {
+  const type = (await canMakeWebp()) ? "image/webp" : opts.keepAlpha ? "image/png" : "image/jpeg";
+  const ext = type === "image/webp" ? "webp" : type === "image/png" ? "png" : "jpg";
+  let side = Math.min(opts.maxSide, Math.max(bitmap.width, bitmap.height));
+  for (let round = 0; round < 6; round++) {
+    const canvas = draw(bitmap, side, type === "image/jpeg" ? "#fff" : null);
+    for (const q of type === "image/png" ? [undefined] : QUALITIES) {
+      const blob = await toBlob(canvas, type, q);
+      if (!blob) return null;
+      if (blob.size <= opts.maxBytes) return new File([blob], `${opts.name}.${ext}`, { type: blob.type });
+    }
+    side = Math.round(side * 0.8);
+  }
+  return null;
+}
+
+/**
+ * (Navegador) Reduce una captura de pantalla o foto antes de subirla (máx.
+ * 1600 px y 1.5 MB). Los PDF se suben tal cual.
+ */
+export async function prepareProofFile(file: File): Promise<Prepared> {
   if (file.type === "application/pdf") {
     return file.size <= PROOF_MAX_BYTES ? { ok: true, file } : { ok: false, error: "El PDF pesa más de 1.5 MB" };
   }
-  if (!/^image\/(jpeg|png|webp|heic|heif)$/.test(file.type)) {
-    return { ok: false, error: "Sube una imagen (captura de pantalla) o un PDF" };
-  }
-
+  if (!IMAGE_IN.test(file.type)) return { ok: false, error: "Sube una imagen (captura de pantalla o foto) o un PDF" };
   try {
     const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("canvas");
-    ctx.fillStyle = "#fff"; // fondo blanco para PNG con transparencia
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const out = await shrink(bitmap, { maxSide: 1600, maxBytes: PROOF_MAX_BYTES, keepAlpha: false, name: "comprobante" });
     bitmap.close();
-
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.8));
-    if (!blob) throw new Error("toBlob");
-    const compressed = new File([blob], "comprobante.jpg", { type: "image/jpeg" });
-    const best = compressed.size < file.size ? compressed : file;
-    return best.size <= PROOF_MAX_BYTES ? { ok: true, file: best } : { ok: false, error: "La imagen pesa más de 1.5 MB" };
+    if (out) return { ok: true, file: out };
+    return { ok: false, error: "No pudimos reducir la imagen. Prueba con una captura de pantalla." };
   } catch {
     // Formato que el navegador no sabe abrir (p. ej. HEIC en algunos equipos).
     return file.size <= PROOF_MAX_BYTES && file.type !== "image/heic" && file.type !== "image/heif"
       ? { ok: true, file }
-      : { ok: false, error: "No pudimos procesar la imagen. Envía una captura en JPG o PNG." };
+      : { ok: false, error: "No pudimos abrir la imagen. Envía una captura en JPG o PNG." };
   }
 }
 
-/**
- * (Navegador) Prepara el logo: máx. 512 px y en WebP (o PNG si el navegador no
- * sabe hacer WebP), conservando la transparencia.
- */
-export async function prepareLogoFile(file: File): Promise<{ ok: true; file: File } | { ok: false; error: string }> {
+/** (Navegador) Prepara el logo: máx. 512 px, conservando la transparencia. */
+export async function prepareLogoFile(file: File): Promise<Prepared> {
   if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return { ok: false, error: "Sube el logo en PNG, JPG o WebP" };
   try {
     const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 512 / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("canvas");
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const out = await shrink(bitmap, { maxSide: 512, maxBytes: LOGO_MAX_BYTES, keepAlpha: true, name: "logo" });
     bitmap.close();
-    const toBlob = (type: string) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.9));
-    let blob = await toBlob("image/webp");
-    if (!blob || blob.type !== "image/webp") blob = await toBlob("image/png");
-    if (!blob) throw new Error("toBlob");
-    const out = new File([blob], `logo.${blob.type === "image/webp" ? "webp" : "png"}`, { type: blob.type });
-    return out.size <= LOGO_MAX_BYTES ? { ok: true, file: out } : { ok: false, error: "El logo pesa demasiado; prueba con uno más sencillo" };
+    return out ? { ok: true, file: out } : { ok: false, error: "El logo pesa demasiado; prueba con uno más sencillo" };
   } catch {
     return { ok: false, error: "No pudimos abrir la imagen. Prueba con un PNG o JPG." };
   }
@@ -69,30 +96,16 @@ export async function prepareLogoFile(file: File): Promise<{ ok: true; file: Fil
 
 /**
  * (Navegador) Reduce cualquier imagen del negocio según su tipo (ver
- * MEDIA_RULES) a WebP, o PNG si el navegador no sabe hacer WebP.
+ * MEDIA_RULES): WebP, o JPEG si el navegador no sabe hacer WebP.
  */
-export async function prepareMediaFile(
-  file: File,
-  kind: MediaKind,
-): Promise<{ ok: true; file: File } | { ok: false; error: string }> {
+export async function prepareMediaFile(file: File, kind: MediaKind): Promise<Prepared> {
   const rule = MEDIA_RULES[kind];
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return { ok: false, error: `Sube la ${rule.label} en JPG, PNG o WebP` };
+  if (!IMAGE_IN.test(file.type)) return { ok: false, error: `Sube la ${rule.label} en JPG, PNG o WebP` };
   try {
     const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, rule.maxSide / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("canvas");
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    const out = await shrink(bitmap, { maxSide: rule.maxSide, maxBytes: rule.maxBytes, keepAlpha: kind === "logo", name: kind });
     bitmap.close();
-    const toBlob = (type: string) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.85));
-    let blob = await toBlob("image/webp");
-    if (!blob || blob.type !== "image/webp") blob = await toBlob("image/png");
-    if (!blob) throw new Error("toBlob");
-    const out = new File([blob], `${kind}.${blob.type === "image/webp" ? "webp" : "png"}`, { type: blob.type });
-    return out.size <= rule.maxBytes ? { ok: true, file: out } : { ok: false, error: `La ${rule.label} pesa demasiado` };
+    return out ? { ok: true, file: out } : { ok: false, error: `No pudimos reducir la ${rule.label}. Prueba con otra foto.` };
   } catch {
     return { ok: false, error: "No pudimos abrir la imagen. Prueba con un JPG o PNG." };
   }
